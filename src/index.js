@@ -26,13 +26,17 @@ async function safeHandleMessage(message) {
 }
 
 async function handleMessage(message) {
+  if (/^wx\s+help$/i.test(message)) {
+    return helpText();
+  }
+
   const command = parseCommand(message);
 
   if (!command) {
-    return "Use: wx tdy town prov | wx tmr town prov | wx wk town prov";
+    return "Use: wx tdy town prov | wx tdy utm zone easting northing";
   }
 
-  const place = await geocode(command.town, command.province);
+  const place = command.coords || await geocode(command.town, command.province);
   if (!place) {
     return `No match for ${command.town}, ${command.province}. Try nearest larger town.`;
   }
@@ -42,6 +46,11 @@ async function handleMessage(message) {
 }
 
 function parseCommand(message) {
+  const utm = parseUtmCommand(message);
+  if (utm) {
+    return utm;
+  }
+
   const match = message.match(/^wx\s+(tdy|tmr|wk)\s+(.+)$/i);
   if (!match) {
     return null;
@@ -67,6 +76,44 @@ function parseCommand(message) {
   };
 }
 
+function parseUtmCommand(message) {
+  const match = message.match(/^wx\s+(tdy|tmr|wk)\s+utm\s+(\d{1,2}[c-xC-X]?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const mode = match[1].toLowerCase();
+  const grid = match[2].toUpperCase();
+  const gridMatch = grid.match(/^(\d{1,2})([C-X])?$/);
+  if (!gridMatch) {
+    return null;
+  }
+
+  const zone = Number(gridMatch[1]);
+  const band = gridMatch[2] || "N";
+  const easting = Number(match[3]);
+  const northing = Number(match[4]);
+
+  if (zone < 1 || zone > 60 || easting < 100000 || easting > 900000 || northing < 0 || northing > 10000000) {
+    return null;
+  }
+
+  const coords = utmToLatLon(zone, easting, northing, band >= "N");
+  if (coords.lat < 40 || coords.lat > 84 || coords.lon < -145 || coords.lon > -45) {
+    return null;
+  }
+
+  return {
+    mode,
+    coords: {
+      name: `UTM ${grid}`,
+      province: "",
+      lat: coords.lat,
+      lon: coords.lon,
+    },
+  };
+}
+
 function parseProvince(location) {
   const normalized = normalize(location);
   const matches = Object.entries(PROVINCES)
@@ -83,6 +130,15 @@ function parseProvince(location) {
 }
 
 async function geocode(town, province) {
+  const openMeteoMatch = await geocodeOpenMeteo(town, province);
+  if (openMeteoMatch) {
+    return openMeteoMatch;
+  }
+
+  return geocodeNominatim(town, province);
+}
+
+async function geocodeOpenMeteo(town, province) {
   const params = new URLSearchParams({
     name: town,
     count: "10",
@@ -110,6 +166,44 @@ async function geocode(town, province) {
     province,
     lat: match.latitude,
     lon: match.longitude,
+  };
+}
+
+async function geocodeNominatim(town, province) {
+  const params = new URLSearchParams({
+    q: `${town}, ${province}, Canada`,
+    format: "jsonv2",
+    limit: "5",
+    countrycodes: "ca",
+    addressdetails: "1",
+  });
+
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "Sat-Weather/0.1 (https://github.com/Liam-McCartney/Sat-Weather)",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Nominatim failed: ${response.status}`);
+  }
+
+  const results = await response.json();
+  const match = results.find((result) => {
+    const address = result.address || {};
+    return normalize(address.state || address.province || "") === normalize(province);
+  }) || results[0];
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    name: shortPlaceName(match.display_name, town),
+    province,
+    lat: Number(match.lat),
+    lon: Number(match.lon),
   };
 }
 
@@ -194,6 +288,61 @@ function shortDate(value) {
 
 function normalize(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function shortPlaceName(displayName, fallback) {
+  return String(displayName || fallback).split(",")[0].trim() || fallback;
+}
+
+function helpText() {
+  return "Cmds: wx tdy town prov; wx tmr town prov; wx wk town prov; wx tdy utm zone easting northing. Ex: wx tdy algonquin park on";
+}
+
+function utmToLatLon(zone, easting, northing, northernHemisphere) {
+  const a = 6378137;
+  const f = 1 / 298.257223563;
+  const k0 = 0.9996;
+  const e2 = f * (2 - f);
+  const ePrime2 = e2 / (1 - e2);
+  const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+
+  const x = easting - 500000;
+  const y = northernHemisphere ? northing : northing - 10000000;
+  const lonOrigin = ((zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+  const m = y / k0;
+  const mu = m / (a * (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256));
+
+  const fp = mu
+    + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu)
+    + (21 * e1 ** 2 / 16 - 55 * e1 ** 4 / 32) * Math.sin(4 * mu)
+    + (151 * e1 ** 3 / 96) * Math.sin(6 * mu)
+    + (1097 * e1 ** 4 / 512) * Math.sin(8 * mu);
+
+  const sinFp = Math.sin(fp);
+  const cosFp = Math.cos(fp);
+  const tanFp = Math.tan(fp);
+  const c1 = ePrime2 * cosFp ** 2;
+  const t1 = tanFp ** 2;
+  const n1 = a / Math.sqrt(1 - e2 * sinFp ** 2);
+  const r1 = a * (1 - e2) / (1 - e2 * sinFp ** 2) ** 1.5;
+  const d = x / (n1 * k0);
+
+  const lat = fp - (n1 * tanFp / r1) * (
+    d ** 2 / 2
+    - (5 + 3 * t1 + 10 * c1 - 4 * c1 ** 2 - 9 * ePrime2) * d ** 4 / 24
+    + (61 + 90 * t1 + 298 * c1 + 45 * t1 ** 2 - 252 * ePrime2 - 3 * c1 ** 2) * d ** 6 / 720
+  );
+
+  const lon = lonOrigin + (
+    d
+    - (1 + 2 * t1 + c1) * d ** 3 / 6
+    + (5 - 2 * c1 + 28 * t1 - 3 * c1 ** 2 + 8 * ePrime2 + 24 * t1 ** 2) * d ** 5 / 120
+  ) / cosFp;
+
+  return {
+    lat: lat * 180 / Math.PI,
+    lon: lon * 180 / Math.PI,
+  };
 }
 
 function weatherCode(code) {
