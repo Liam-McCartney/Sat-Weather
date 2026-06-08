@@ -252,7 +252,7 @@ function formatDay(mode, place, data, dayIndex) {
   const day = dailyAt(data, dayIndex);
   const label = mode === "tmr" ? "Tmr" : "Tdy";
   const parts = dayparts(data, day.time)
-    .map((part) => `${part.label}${Math.round(part.temp)}C ${part.pop}% ${weatherCode(part.code)}`)
+    .map((part) => `${part.label}${Math.round(part.temp)}C ${part.pop}%/${round1(part.precip)}mm ${weatherCode(part.code)}`)
     .join("; ");
 
   return `${place.name}: ${label} ${Math.round(day.min)}..${Math.round(day.max)}C ${weatherCode(day.code)}. Rain ${day.pop}%/${round1(day.precip)}mm. ${parts}. Wind ${compass(day.windDir)} ${Math.round(day.wind)}km/h.`;
