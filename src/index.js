@@ -220,6 +220,14 @@ async function getForecast(lat, lon) {
       "wind_speed_10m_max",
       "wind_direction_10m_dominant",
     ].join(","),
+    hourly: [
+      "temperature_2m",
+      "precipitation_probability",
+      "precipitation",
+      "weather_code",
+      "wind_speed_10m",
+      "wind_direction_10m",
+    ].join(","),
     forecast_days: "7",
     timezone: "auto",
   });
@@ -243,19 +251,20 @@ function formatForecast(mode, place, data) {
 function formatDay(mode, place, data, dayIndex) {
   const day = dailyAt(data, dayIndex);
   const label = mode === "tmr" ? "Tmr" : "Tdy";
+  const parts = dayparts(data, day.time)
+    .map((part) => `${part.label}${Math.round(part.temp)}C ${part.pop}% ${weatherCode(part.code)}`)
+    .join("; ");
 
-  return `${place.name}: ${label} ${Math.round(day.min)}..${Math.round(day.max)}C ${weatherCode(day.code)}. Rain ${day.pop}%/${round1(day.precip)}mm. Wind ${compass(day.windDir)} ${Math.round(day.wind)}km/h.`;
+  return `${place.name}: ${label} ${Math.round(day.min)}..${Math.round(day.max)}C ${weatherCode(day.code)}. Rain ${day.pop}%/${round1(day.precip)}mm. ${parts}. Wind ${compass(day.windDir)} ${Math.round(day.wind)}km/h.`;
 }
 
 function formatWeek(place, data) {
   const days = Array.from({ length: 7 }, (_, index) => dailyAt(data, index));
-  const min = Math.round(Math.min(...days.map((day) => day.min)));
-  const max = Math.round(Math.max(...days.map((day) => day.max)));
-  const wetDays = days.filter((day) => day.pop >= 40 || day.precip >= 1).length;
-  const wettest = days.reduce((best, day) => day.precip > best.precip ? day : best, days[0]);
-  const windiest = Math.max(...days.map((day) => day.wind));
+  const summary = days
+    .map((day) => `${weekday(day.time)} ${Math.round(day.min)}..${Math.round(day.max)}C ${day.pop}% ${weatherCode(day.code)}`)
+    .join("; ");
 
-  return `${place.name}: Wk ${min}..${max}C. Wet ${wetDays}/7d, max rain ${round1(wettest.precip)}mm ${shortDate(wettest.time)}. Max wind ${Math.round(windiest)}km/h.`;
+  return `${place.name}: ${summary}.`;
 }
 
 function dailyAt(data, index) {
@@ -277,13 +286,80 @@ function compass(degrees) {
   return dirs[Math.round(degrees / 45) % 8];
 }
 
+function dayparts(data, date) {
+  const ranges = [
+    { label: "O/n", start: 0, end: 6 },
+    { label: "Morn", start: 6, end: 11 },
+    { label: "Mid", start: 11, end: 14 },
+    { label: "Aft", start: 14, end: 18 },
+    { label: "Eve", start: 18, end: 22 },
+    { label: "Nite", start: 22, end: 24 },
+  ];
+
+  return ranges
+    .map((range) => summarizeHours(data, date, range))
+    .filter(Boolean);
+}
+
+function summarizeHours(data, date, range) {
+  const hourly = data.hourly;
+  const hours = hourly.time
+    .map((time, index) => ({ time, index, hour: Number(time.slice(11, 13)) }))
+    .filter((hour) => timeDate(hour.time) === date && hour.hour >= range.start && hour.hour < range.end);
+
+  if (!hours.length) {
+    return null;
+  }
+
+  const indexes = hours.map((hour) => hour.index);
+  const maxPop = Math.max(...indexes.map((index) => hourly.precipitation_probability[index] ?? 0));
+  const totalPrecip = indexes.reduce((sum, index) => sum + (hourly.precipitation[index] ?? 0), 0);
+  const avgTemp = average(indexes.map((index) => hourly.temperature_2m[index]));
+  const code = dominantCode(indexes.map((index) => hourly.weather_code[index]));
+
+  return {
+    label: range.label,
+    pop: maxPop,
+    precip: totalPrecip,
+    temp: avgTemp,
+    code,
+  };
+}
+
+function dominantCode(codes) {
+  const counts = new Map();
+  for (const code of codes) {
+    counts.set(code, (counts.get(code) || 0) + weatherSeverity(code));
+  }
+
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+}
+
+function weatherSeverity(code) {
+  if (code >= 95) return 6;
+  if (code >= 80) return 5;
+  if (code >= 70) return 4;
+  if (code >= 60) return 3;
+  if (code >= 50) return 2;
+  if (code >= 45) return 1.5;
+  return 1;
+}
+
+function average(values) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
 function round1(value) {
   return Math.round(value * 10) / 10;
 }
 
-function shortDate(value) {
-  const [, month, day] = value.match(/^\d{4}-(\d{2})-(\d{2})$/) || [];
-  return month && day ? `${month}/${day}` : value;
+function timeDate(value) {
+  return value.slice(0, 10);
+}
+
+function weekday(value) {
+  const date = new Date(`${value}T12:00:00Z`);
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getUTCDay()];
 }
 
 function normalize(value) {
