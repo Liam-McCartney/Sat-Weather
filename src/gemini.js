@@ -19,15 +19,14 @@ export class GeminiTestService {
         "x-goog-api-key": cleanKey,
       },
       body: JSON.stringify({
+        systemInstruction: {
+          parts: [
+            {
+              text: ASK_SYSTEM_PROMPT,
+            },
+          ],
+        },
         contents: [
-          {
-            role: "system",
-            parts: [
-              {
-                text: ASK_SYSTEM_PROMPT,
-              },
-            ],
-          },
           {
             role: "user",
             parts: [
