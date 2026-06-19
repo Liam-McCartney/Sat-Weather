@@ -84,12 +84,10 @@ async function callPerplexity(question, apiKey) {
   const response = await fetch(PERPLEXITY_GATEWAY_URL, {
     method: "POST",
     headers: {
-      "Accept": "application/json",
       "Authorization": `Bearer ${cleanKey}`,
       "Content-Type": "application/json",
-      "User-Agent": "Sat-Weather/0.1",
     },
-    body: new TextEncoder().encode(payload),
+    body: payload,
   });
 
   if (!response.ok) {
