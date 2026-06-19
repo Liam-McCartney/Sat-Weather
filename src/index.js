@@ -1,6 +1,11 @@
 export default {
   async fetch(request, env) {
     if (request.method === "GET") {
+      const url = new URL(request.url);
+      if (url.pathname === "/debug-ask") {
+        return debugAsk(url.searchParams.get("q") || "habs game score", env);
+      }
+
       return new Response(`Sat Weather ${APP_VERSION} is running.`);
     }
 
@@ -64,29 +69,19 @@ async function handleAsk(question, env) {
     return "Ask not configured. Add PERPLEXITY_API_KEY as a Cloudflare Worker secret.";
   }
 
-  const data = await callPerplexity(question, env.PERPLEXITY_API_KEY);
+  const data = await callPerplexity(question, env);
   const text = data.choices?.[0]?.message?.content;
   return limitSms(text || "No answer returned.");
 }
 
-async function callPerplexity(question, apiKey) {
-  const cleanKey = String(apiKey || "").trim();
-  const payload = JSON.stringify({
-    model: "sonar-pro",
-    messages: [
-      {
-        role: "user",
-        content: question,
-      },
-    ],
-  });
+async function callPerplexity(question, env) {
+  const cleanKey = String(env?.PERPLEXITY_API_KEY || "").trim();
+  const payload = perplexityPayload(question);
+  const endpoint = await perplexityGatewayUrl(env);
 
-  const response = await fetch(PERPLEXITY_GATEWAY_URL, {
+  const response = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${cleanKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: perplexityHeaders(cleanKey),
     body: payload,
   });
 
@@ -112,6 +107,61 @@ async function callPerplexity(question, apiKey) {
   }
 
   return response.json();
+}
+
+async function debugAsk(question, env) {
+  const cleanKey = String(env?.PERPLEXITY_API_KEY || "").trim();
+  const payload = perplexityPayload(question);
+  const endpoint = await perplexityGatewayUrl(env);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: perplexityHeaders(cleanKey),
+    body: payload,
+  });
+  const body = await response.text();
+
+  return Response.json({
+    appVersion: APP_VERSION,
+    endpoint,
+    hasAiBinding: Boolean(env?.AI),
+    question,
+    hasKey: cleanKey.length > 0,
+    keyLength: cleanKey.length,
+    payload,
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+    body,
+  }, { status: 200 });
+}
+
+async function perplexityGatewayUrl(env) {
+  if (env?.AI) {
+    const baseUrl = await env.AI.gateway("sat-weather").getUrl("perplexity-ai");
+    return `${baseUrl}/chat/completions`;
+  }
+
+  return PERPLEXITY_GATEWAY_URL;
+}
+
+function perplexityPayload(question) {
+  const payload = JSON.stringify({
+    model: "sonar-pro",
+    messages: [
+      {
+        role: "user",
+        content: question,
+      },
+    ],
+  });
+  return payload;
+}
+
+function perplexityHeaders(apiKey) {
+  return {
+    "Authorization": `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
 }
 
 async function callPerplexitySearch(question, apiKey) {
@@ -620,7 +670,7 @@ const PROVINCES = {
   yukon: "Yukon",
 };
 
-const APP_VERSION = "2026-06-19-aig-native-pplx";
+const APP_VERSION = "2026-06-19-aig-binding-debug";
 const PERPLEXITY_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/0220c3a82e8c2874e60132409274661c/sat-weather/perplexity-ai/chat/completions";
 
 function twiml(message) {
