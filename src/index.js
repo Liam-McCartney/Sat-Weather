@@ -81,12 +81,12 @@ async function handleAsk(question, env) {
 
 async function generateAskResponse(prompt, apiKey) {
   const attempts = [
-    { model: "gemini-3.5-flash", grounded: true },
-    { model: "gemini-2.5-flash", grounded: true },
-    { model: "gemini-2.0-flash", grounded: true },
-    { model: "gemini-3.5-flash", grounded: false },
-    { model: "gemini-2.5-flash", grounded: false },
     { model: "gemini-2.0-flash", grounded: false },
+    { model: "gemini-1.5-flash", grounded: false },
+    { model: "gemini-2.5-flash", grounded: false },
+    { model: "gemini-2.0-flash", grounded: true },
+    { model: "gemini-1.5-flash", grounded: true },
+    { model: "gemini-2.5-flash", grounded: true },
   ];
 
   const errors = [];
@@ -121,11 +121,13 @@ function callGemini(prompt, apiKey, attempt) {
     body.tools = [{ google_search: {} }];
   }
 
-  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${attempt.model}:generateContent`, {
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${attempt.model}:generateContent`);
+  url.searchParams.set("key", apiKey);
+
+  return fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
     },
     body: JSON.stringify(body),
   });
