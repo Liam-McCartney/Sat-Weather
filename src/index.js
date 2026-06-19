@@ -81,7 +81,7 @@ async function callPerplexity(question, apiKey) {
     ],
   });
 
-  const response = await fetch("https://api.perplexity.ai/chat/completions", {
+  const response = await fetch("https://api.perplexity.ai/v1/sonar", {
     method: "POST",
     headers: {
       "Accept": "application/json",
