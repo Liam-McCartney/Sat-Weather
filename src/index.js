@@ -81,15 +81,7 @@ async function callPerplexity(question, apiKey) {
       messages: [
         {
           role: "user",
-          content: [
-            "Answer for satellite SMS in <=450 chars.",
-            "Use current web info.",
-            "Be accurate, practical, concise.",
-            "No markdown tables.",
-            "If uncertain, say so.",
-            "For medical/legal/emergency topics, give brief safety-first guidance and recommend professional/local help.",
-            `Question: ${question}`,
-          ].join(" "),
+          content: question,
         },
       ],
     }),
