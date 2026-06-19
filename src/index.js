@@ -542,6 +542,9 @@ function compactText(text, maxLength) {
 
 function cleanAskText(text) {
   return String(text)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
     .replace(/\[\d+(?:,\s*\d+)*\]/g, "")
     .replace(/\s+([.,!?;:])/g, "$1")
     .trim();
@@ -652,12 +655,12 @@ const PROVINCES = {
 };
 
 const APP_VERSION = "2026-06-19-aig-perplexity";
-const ASK_SMS_LIMIT = 160;
+const ASK_SMS_LIMIT = 306;
 const ASK_SYSTEM_PROMPT = [
   "You answer for a satellite SMS bot used when the sender has poor or no data service.",
-  "Reply in one plain-text SMS under 160 characters.",
+  "Reply in plain ASCII text under 306 characters, ideally under 250.",
   "Use current web info when relevant.",
-  "Give the answer first. No markdown, citations, links, preambles, or caveats unless safety-critical.",
+  "Give the answer first. No markdown, citations, links, emojis, smart punctuation, preambles, or caveats unless safety-critical.",
   "If uncertain, say so briefly and give the most useful next check.",
 ].join(" ");
 const PERPLEXITY_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/0220c3a82e8c2874e60132409274661c/sat-weather/perplexity-ai/chat/completions";
