@@ -102,10 +102,26 @@ async function callPerplexity(question, apiKey) {
   });
 
   if (!response.ok) {
-    throw new Error(`Perplexity failed: ${response.status} ${await response.text()}`);
+    return {
+      choices: [{
+        message: {
+          content: `Ask unavailable: Perplexity ${response.status} ${await shortProviderError(response)}`,
+        },
+      }],
+    };
   }
 
   return response.json();
+}
+
+async function shortProviderError(response) {
+  const body = await response.text();
+  try {
+    const parsed = JSON.parse(body);
+    return limitSms(parsed.error?.message || parsed.message || body, 160);
+  } catch {
+    return limitSms(body, 160);
+  }
 }
 
 function parseCommand(message) {
