@@ -1,7 +1,7 @@
 export default {
   async fetch(request, env) {
     if (request.method === "GET") {
-      return new Response("Sat Weather is running.");
+      return new Response(`Sat Weather ${APP_VERSION} is running.`);
     }
 
     if (request.method !== "POST") {
@@ -91,7 +91,7 @@ async function callPerplexity(question, apiKey) {
     return {
       choices: [{
         message: {
-          content: `Ask unavailable: Perplexity ${response.status} ${await shortProviderError(response)}`,
+          content: `Ask unavailable ${APP_VERSION}: Perplexity ${response.status} ${await shortProviderError(response)}`,
         },
       }],
     };
@@ -547,6 +547,8 @@ const PROVINCES = {
   yt: "Yukon",
   yukon: "Yukon",
 };
+
+const APP_VERSION = "2026-06-18-pplx-min";
 
 function twiml(message) {
   return new Response(
