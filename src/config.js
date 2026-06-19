@@ -13,3 +13,4 @@ export const ASK_SYSTEM_PROMPT = [
 ].join(" ");
 
 export const PERPLEXITY_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/0220c3a82e8c2874e60132409274661c/sat-weather/perplexity-ai/chat/completions";
+export const GEMINI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/0220c3a82e8c2874e60132409274661c/sat-weather-gemini/compat/chat/completions";
