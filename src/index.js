@@ -66,7 +66,7 @@ async function handleAsk(question, env) {
 
   const data = await callPerplexity(question, env);
   const text = data.choices?.[0]?.message?.content;
-  return compactText(text || "No answer returned.", ASK_SMS_LIMIT);
+  return compactText(cleanAskText(text || "No answer returned."), ASK_SMS_LIMIT);
 }
 
 async function callPerplexity(question, env) {
@@ -538,6 +538,13 @@ function limitSms(text) {
 function compactText(text, maxLength) {
   const compact = String(text).replace(/\s+/g, " ").trim();
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trim()}...`;
+}
+
+function cleanAskText(text) {
+  return String(text)
+    .replace(/\[\d+(?:,\s*\d+)*\]/g, "")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .trim();
 }
 
 function utmToLatLon(zone, easting, northing, northernHemisphere) {
