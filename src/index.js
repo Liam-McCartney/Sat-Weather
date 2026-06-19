@@ -89,6 +89,17 @@ async function callPerplexity(question, apiKey) {
   });
 
   if (!response.ok) {
+    const searchFallback = await callPerplexitySearch(question, cleanKey);
+    if (searchFallback) {
+      return {
+        choices: [{
+          message: {
+            content: searchFallback,
+          },
+        }],
+      };
+    }
+
     return {
       choices: [{
         message: {
@@ -99,6 +110,44 @@ async function callPerplexity(question, apiKey) {
   }
 
   return response.json();
+}
+
+async function callPerplexitySearch(question, apiKey) {
+  const response = await fetch("https://api.perplexity.ai/search", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: question,
+      max_results: 3,
+      search_context_size: "low",
+    }),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json();
+  const results = data.results || [];
+  if (!results.length) {
+    return null;
+  }
+
+  return formatSearchResults(results);
+}
+
+function formatSearchResults(results) {
+  return results
+    .slice(0, 2)
+    .map((result, index) => {
+      const title = compactText(result.title || `Result ${index + 1}`, 45);
+      const snippet = compactText(result.snippet || "", 150);
+      return snippet ? `${index + 1}) ${title}: ${snippet}` : `${index + 1}) ${title}`;
+    })
+    .join(" ");
 }
 
 async function shortProviderError(response) {
@@ -443,6 +492,11 @@ function helpText() {
 function limitSms(text) {
   const compact = text.replace(/\s+/g, " ").trim();
   return compact.length <= 450 ? compact : `${compact.slice(0, 447).trim()}...`;
+}
+
+function compactText(text, maxLength) {
+  const compact = String(text).replace(/\s+/g, " ").trim();
+  return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trim()}...`;
 }
 
 function utmToLatLon(zone, easting, northing, northernHemisphere) {
