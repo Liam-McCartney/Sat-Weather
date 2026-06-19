@@ -1,5 +1,5 @@
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     if (request.method === "GET") {
       return new Response("Sat Weather is running.");
     }
@@ -10,24 +10,29 @@ export default {
 
     const form = await request.formData();
     const message = String(form.get("Body") || "").trim();
-    const reply = await safeHandleMessage(message);
+    const reply = await safeHandleMessage(message, env);
 
     return twiml(reply);
   },
 };
 
-async function safeHandleMessage(message) {
+async function safeHandleMessage(message, env) {
   try {
-    return await handleMessage(message);
+    return await handleMessage(message, env);
   } catch (error) {
     console.error(error);
-    return "Wx error. Try: wx tdy town prov";
+    return "Error. Try: wx help";
   }
 }
 
-async function handleMessage(message) {
-  if (/^wx\s+help$/i.test(message)) {
+async function handleMessage(message, env) {
+  if (/^(wx\s+)?help$/i.test(message)) {
     return helpText();
+  }
+
+  const ask = parseAsk(message);
+  if (ask) {
+    return handleAsk(ask, env);
   }
 
   const command = parseCommand(message);
@@ -43,6 +48,55 @@ async function handleMessage(message) {
 
   const forecast = await getForecast(place.lat, place.lon);
   return formatForecast(command.mode, place, forecast);
+}
+
+function parseAsk(message) {
+  const match = message.match(/^(?:wx\s+)?ask\s+(.+)$/i);
+  if (!match) {
+    return null;
+  }
+
+  return match[1].trim();
+}
+
+async function handleAsk(question, env) {
+  if (!env?.GEMINI_API_KEY) {
+    return "Ask not configured. Add GEMINI_API_KEY as a Cloudflare Worker secret.";
+  }
+
+  const prompt = [
+    "Answer for satellite SMS.",
+    "Be accurate, practical, and concise.",
+    "Use <= 450 characters.",
+    "If uncertain, say so.",
+    "For medical/legal/emergency topics, give brief safety-first guidance and recommend professional/local help.",
+    "",
+    `Question: ${question}`,
+  ].join("\n");
+
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": env.GEMINI_API_KEY,
+    },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 140,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
+  return limitSms(text || "No answer returned.");
 }
 
 function parseCommand(message) {
@@ -371,7 +425,12 @@ function shortPlaceName(displayName, fallback) {
 }
 
 function helpText() {
-  return "Cmds: wx tdy town prov; wx tmr town prov; wx wk town prov; wx tdy utm zone easting northing. Ex: wx tdy algonquin park on";
+  return "Cmds: wx tdy/tmr/wk town prov; wx tdy utm zone easting northing; ask question. Ex: wx tdy algonquin park on";
+}
+
+function limitSms(text) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  return compact.length <= 450 ? compact : `${compact.slice(0, 447).trim()}...`;
 }
 
 function utmToLatLon(zone, easting, northing, northernHemisphere) {
