@@ -19,7 +19,7 @@ export class GeminiTestService {
       if (!direct.ok) {
         const openAi = await this.callGeminiOpenAi(cleanKey, question);
         if (!openAi.ok) {
-          return `Gemini unavailable: gw ${gateway.status} ${gateway.error}; native ${direct.status} ${direct.error}; compat ${openAi.status} ${openAi.error}`;
+          return `Gemini unavailable: keyLen ${cleanKey.length}; gw ${gateway.status} ${gateway.error}; native ${direct.status} ${direct.error}; compat ${openAi.status} ${openAi.error}`;
         }
 
         return this.formatOpenAiResponse(openAi.data);
