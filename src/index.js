@@ -70,10 +70,11 @@ async function handleAsk(question, env) {
 }
 
 async function callPerplexity(question, apiKey) {
+  const cleanKey = String(apiKey || "").trim();
   const response = await fetch("https://api.perplexity.ai/chat/completions", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
+      "Authorization": `Bearer ${cleanKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
