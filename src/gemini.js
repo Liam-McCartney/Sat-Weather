@@ -12,13 +12,46 @@ export class GeminiTestService {
       return "Gemini not configured. Add GEMINI_API_KEY as a Cloudflare Worker secret.";
     }
 
-    const response = await fetch(GEMINI_GATEWAY_URL, {
+    const payload = this.payload(question);
+    const gateway = await this.callGemini(GEMINI_GATEWAY_URL, cleanKey, payload);
+    if (!gateway.ok) {
+      const direct = await this.callGemini(GEMINI_DIRECT_URL, cleanKey, payload);
+      if (!direct.ok) {
+        return `Gemini unavailable: gw ${gateway.status} ${gateway.error}; direct ${direct.status} ${direct.error}`;
+      }
+
+      return this.formatResponse(direct.data);
+    }
+
+    return this.formatResponse(gateway.data);
+  }
+
+  async callGemini(url, apiKey, payload) {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-goog-api-key": cleanKey,
+        "x-goog-api-key": apiKey,
       },
-      body: JSON.stringify({
+      body: payload,
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: await shortProviderError(response),
+      };
+    }
+
+    return {
+      ok: true,
+      data: await response.json(),
+    };
+  }
+
+  payload(question) {
+    return JSON.stringify({
         systemInstruction: {
           parts: [
             {
@@ -40,14 +73,10 @@ export class GeminiTestService {
           maxOutputTokens: 120,
           temperature: 0,
         },
-      }),
     });
+  }
 
-    if (!response.ok) {
-      return `Gemini unavailable: ${response.status} ${await shortProviderError(response)}`;
-    }
-
-    const data = await response.json();
+  formatResponse(data) {
     const text = data.candidates?.[0]?.content?.parts
       ?.map((part) => part.text || "")
       .join(" ") || "No answer returned.";
@@ -73,3 +102,5 @@ async function shortProviderError(response) {
     return limitSms(body, 160);
   }
 }
+
+const GEMINI_DIRECT_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
