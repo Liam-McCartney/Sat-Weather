@@ -15,22 +15,32 @@ export class GeminiTestService {
     const response = await fetch(GEMINI_GATEWAY_URL, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${cleanKey}`,
         "Content-Type": "application/json",
+        "x-goog-api-key": cleanKey,
       },
       body: JSON.stringify({
-        model: "gemini-3.5-flash",
-        max_tokens: 120,
-        messages: [
+        contents: [
           {
             role: "system",
-            content: ASK_SYSTEM_PROMPT,
+            parts: [
+              {
+                text: ASK_SYSTEM_PROMPT,
+              },
+            ],
           },
           {
             role: "user",
-            content: question,
+            parts: [
+              {
+                text: question,
+              },
+            ],
           },
         ],
+        generationConfig: {
+          maxOutputTokens: 120,
+          temperature: 0,
+        },
       }),
     });
 
@@ -39,7 +49,9 @@ export class GeminiTestService {
     }
 
     const data = await response.json();
-    const text = data.choices?.[0]?.message?.content || "No answer returned.";
+    const text = data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join(" ") || "No answer returned.";
     return takeSmsChunk(cleanAskText(text), ASK_SMS_LIMIT);
   }
 }
