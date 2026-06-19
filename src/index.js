@@ -1,11 +1,6 @@
 export default {
   async fetch(request, env) {
     if (request.method === "GET") {
-      const url = new URL(request.url);
-      if (url.pathname === "/debug-ask") {
-        return debugAsk(url.searchParams.get("q") || "habs game score", env);
-      }
-
       return new Response(`Sat Weather ${APP_VERSION} is running.`);
     }
 
@@ -107,32 +102,6 @@ async function callPerplexity(question, env) {
   }
 
   return response.json();
-}
-
-async function debugAsk(question, env) {
-  const cleanKey = String(env?.PERPLEXITY_API_KEY || "").trim();
-  const payload = perplexityPayload(question);
-  const endpoint = await perplexityGatewayUrl(env);
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: perplexityHeaders(cleanKey),
-    body: payload,
-  });
-  const body = await response.text();
-
-  return Response.json({
-    appVersion: APP_VERSION,
-    endpoint,
-    hasAiBinding: Boolean(env?.AI),
-    question,
-    hasKey: cleanKey.length > 0,
-    keyLength: cleanKey.length,
-    payload,
-    status: response.status,
-    statusText: response.statusText,
-    headers: Object.fromEntries(response.headers.entries()),
-    body,
-  }, { status: 200 });
 }
 
 async function perplexityGatewayUrl(env) {
@@ -670,7 +639,7 @@ const PROVINCES = {
   yukon: "Yukon",
 };
 
-const APP_VERSION = "2026-06-19-aig-binding-debug";
+const APP_VERSION = "2026-06-19-aig-perplexity";
 const PERPLEXITY_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/0220c3a82e8c2874e60132409274661c/sat-weather/perplexity-ai/chat/completions";
 
 function twiml(message) {
