@@ -66,7 +66,7 @@ async function handleAsk(question, env) {
 
   const data = await callPerplexity(question, env);
   const text = data.choices?.[0]?.message?.content;
-  return limitSms(text || "No answer returned.");
+  return compactText(text || "No answer returned.", ASK_SMS_LIMIT);
 }
 
 async function callPerplexity(question, env) {
@@ -116,7 +116,12 @@ async function perplexityGatewayUrl(env) {
 function perplexityPayload(question) {
   const payload = JSON.stringify({
     model: "sonar-pro",
+    max_tokens: 80,
     messages: [
+      {
+        role: "system",
+        content: ASK_SYSTEM_PROMPT,
+      },
       {
         role: "user",
         content: question,
@@ -640,6 +645,14 @@ const PROVINCES = {
 };
 
 const APP_VERSION = "2026-06-19-aig-perplexity";
+const ASK_SMS_LIMIT = 160;
+const ASK_SYSTEM_PROMPT = [
+  "You answer for a satellite SMS bot used when the sender has poor or no data service.",
+  "Reply in one plain-text SMS under 160 characters.",
+  "Use current web info when relevant.",
+  "Give the answer first. No markdown, citations, links, preambles, or caveats unless safety-critical.",
+  "If uncertain, say so briefly and give the most useful next check.",
+].join(" ");
 const PERPLEXITY_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/0220c3a82e8c2874e60132409274661c/sat-weather/perplexity-ai/chat/completions";
 
 function twiml(message) {
