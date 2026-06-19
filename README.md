@@ -20,7 +20,7 @@ wx tdy ottawa on
 wx tmr algonquin park on
 wx wk vancouver bc
 wx tdy utm 17T 630084 4833438
-ask how do i treat mild hypothermia
+ask habs game score
 ```
 
 Named places are geocoded, then converted to a weather forecast. UTM input is converted directly in the Worker and is usually the better option when working from a map in remote areas.
@@ -29,8 +29,8 @@ Today and tomorrow return a day summary plus period breakdowns for overnight, mo
 
 ## Ask
 
-The `ask` command uses Gemini with Google Search grounding for short, practical answers. Configure the API key as a Cloudflare Worker secret:
+The `ask` command uses Perplexity Sonar for short web-grounded answers. Configure the API key as a Cloudflare Worker secret:
 
 ```powershell
-npx wrangler secret put GEMINI_API_KEY
+npx wrangler secret put PERPLEXITY_API_KEY
 ```

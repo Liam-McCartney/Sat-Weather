@@ -60,87 +60,52 @@ function parseAsk(message) {
 }
 
 async function handleAsk(question, env) {
-  if (!env?.GEMINI_API_KEY) {
-    return "Ask not configured. Add GEMINI_API_KEY as a Cloudflare Worker secret.";
+  if (!env?.PERPLEXITY_API_KEY) {
+    return "Ask not configured. Add PERPLEXITY_API_KEY as a Cloudflare Worker secret.";
   }
 
-  const prompt = [
-    "Answer for satellite SMS.",
-    "Be accurate, practical, and concise.",
-    "Use <= 450 characters.",
-    "If uncertain, say so.",
-    "For medical/legal/emergency topics, give brief safety-first guidance and recommend professional/local help.",
-    "",
-    `Question: ${question}`,
-  ].join("\n");
-
-  const data = await generateAskResponse(prompt, env.GEMINI_API_KEY);
-  const text = data.text;
+  const data = await callPerplexity(question, env.PERPLEXITY_API_KEY);
+  const text = data.choices?.[0]?.message?.content;
   return limitSms(text || "No answer returned.");
 }
 
-async function generateAskResponse(prompt, apiKey) {
-  const attempts = [
-    { model: "gemini-2.0-flash", grounded: false },
-    { model: "gemini-1.5-flash", grounded: false },
-    { model: "gemini-2.5-flash", grounded: false },
-    { model: "gemini-2.0-flash", grounded: true },
-    { model: "gemini-1.5-flash", grounded: true },
-    { model: "gemini-2.5-flash", grounded: true },
-  ];
-
-  const errors = [];
-  for (const attempt of attempts) {
-    const response = await callGemini(prompt, apiKey, attempt);
-    if (response.ok) {
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
-      if (text) {
-        return { text };
-      }
-      errors.push(`${attempt.model}: empty`);
-      continue;
-    }
-
-    errors.push(`${attempt.model}${attempt.grounded ? "+search" : ""}: ${response.status} ${await shortError(response)}`);
-  }
-
-  return { text: `Ask unavailable (${errors.slice(0, 2).join("; ")}).` };
-}
-
-function callGemini(prompt, apiKey, attempt) {
-  const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 140,
-    },
-  };
-
-  if (attempt.grounded) {
-    body.tools = [{ google_search: {} }];
-  }
-
-  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${attempt.model}:generateContent`);
-  url.searchParams.set("key", apiKey);
-
-  return fetch(url, {
+async function callPerplexity(question, apiKey) {
+  const response = await fetch("https://api.perplexity.ai/chat/completions", {
     method: "POST",
     headers: {
+      "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model: "sonar",
+      messages: [
+        {
+          role: "system",
+          content: [
+            "Answer for satellite SMS.",
+            "Use current web information.",
+            "Be accurate, practical, and concise.",
+            "Use <= 450 characters.",
+            "No markdown tables.",
+            "If uncertain, say so.",
+            "For medical/legal/emergency topics, give brief safety-first guidance and recommend professional/local help.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: question,
+        },
+      ],
+      max_tokens: 140,
+      temperature: 0.2,
+    }),
   });
-}
 
-async function shortError(response) {
-  const body = await response.text();
-  try {
-    const parsed = JSON.parse(body);
-    return limitSms(parsed.error?.message || body, 120);
-  } catch {
-    return limitSms(body, 120);
+  if (!response.ok) {
+    throw new Error(`Perplexity failed: ${response.status} ${await response.text()}`);
   }
+
+  return response.json();
 }
 
 function parseCommand(message) {
