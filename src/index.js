@@ -87,6 +87,7 @@ async function callPerplexity(question, apiKey) {
       "Accept": "application/json",
       "Authorization": `Bearer ${cleanKey}`,
       "Content-Type": "application/json",
+      "User-Agent": "Sat-Weather/0.1",
     },
     body: new TextEncoder().encode(payload),
   });
@@ -128,6 +129,7 @@ async function callPerplexitySearch(question, apiKey) {
       "Accept": "application/json",
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
+      "User-Agent": "Sat-Weather/0.1",
     },
     body: new TextEncoder().encode(payload),
   });
