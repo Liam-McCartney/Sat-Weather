@@ -80,24 +80,18 @@ async function callPerplexity(question, apiKey) {
       model: "sonar-pro",
       messages: [
         {
-          role: "system",
+          role: "user",
           content: [
-            "Answer for satellite SMS.",
-            "Use current web information.",
-            "Be accurate, practical, and concise.",
-            "Use <= 450 characters.",
+            "Answer for satellite SMS in <=450 chars.",
+            "Use current web info.",
+            "Be accurate, practical, concise.",
             "No markdown tables.",
             "If uncertain, say so.",
             "For medical/legal/emergency topics, give brief safety-first guidance and recommend professional/local help.",
+            `Question: ${question}`,
           ].join(" "),
         },
-        {
-          role: "user",
-          content: question,
-        },
       ],
-      max_tokens: 140,
-      temperature: 0.2,
     }),
   });
 
