@@ -10,29 +10,36 @@ export default {
 
     const form = await request.formData();
     const message = String(form.get("Body") || "").trim();
-    const reply = await safeHandleMessage(message, env);
+    const from = String(form.get("From") || "").trim();
+    const reply = await safeHandleMessage(message, env, from);
 
     return twiml(reply);
   },
 };
 
-async function safeHandleMessage(message, env) {
+async function safeHandleMessage(message, env, from) {
   try {
-    return await handleMessage(message, env);
+    return await handleMessage(message, env, from);
   } catch (error) {
     console.error(error);
     return "Error. Try: wx help";
   }
 }
 
-async function handleMessage(message, env) {
+async function handleMessage(message, env, from) {
+  await purgeOldScratch(env);
+
   if (/^(wx\s+)?help$/i.test(message)) {
     return helpText();
   }
 
+  if (isContinue(message)) {
+    return handleContinue(env, from);
+  }
+
   const ask = parseAsk(message);
   if (ask) {
-    return handleAsk(ask, env);
+    return handleAsk(ask, env, from);
   }
 
   const command = parseCommand(message);
@@ -59,14 +66,18 @@ function parseAsk(message) {
   return match[1].trim();
 }
 
-async function handleAsk(question, env) {
+function isContinue(message) {
+  return /^(?:wx\s+)?(?:cont|continue)$/i.test(message);
+}
+
+async function handleAsk(question, env, from) {
   if (!env?.PERPLEXITY_API_KEY) {
     return "Ask not configured. Add PERPLEXITY_API_KEY as a Cloudflare Worker secret.";
   }
 
   const data = await callPerplexity(question, env);
   const text = data.choices?.[0]?.message?.content;
-  return compactText(cleanAskText(text || "No answer returned."), ASK_SMS_LIMIT);
+  return chunkAskReply(env, from, cleanAskText(text || "No answer returned."));
 }
 
 async function callPerplexity(question, env) {
@@ -116,7 +127,7 @@ async function perplexityGatewayUrl(env) {
 function perplexityPayload(question) {
   const payload = JSON.stringify({
     model: "sonar-pro",
-    max_tokens: 80,
+    max_tokens: 220,
     messages: [
       {
         role: "system",
@@ -527,7 +538,7 @@ function shortPlaceName(displayName, fallback) {
 }
 
 function helpText() {
-  return "Cmds: wx tdy/tmr/wk town prov; wx tdy utm zone easting northing; ask question. Ex: wx tdy algonquin park on";
+  return "Cmds: wx tdy/tmr/wk town prov; wx tdy utm zone easting northing; ask question; cont. Ex: wx tdy algonquin park on";
 }
 
 function limitSms(text) {
@@ -548,6 +559,126 @@ function cleanAskText(text) {
     .replace(/\[\d+(?:,\s*\d+)*\]/g, "")
     .replace(/\s+([.,!?;:])/g, "$1")
     .trim();
+}
+
+async function chunkAskReply(env, from, text) {
+  const clean = compactAscii(text);
+  const first = takeSmsChunk(clean, ASK_SMS_LIMIT - CONT_SUFFIX.length);
+  const tail = clean.slice(first.length).trim();
+
+  if (!tail) {
+    await deleteScratch(env, from);
+    return clean;
+  }
+
+  if (await saveScratch(env, from, tail)) {
+    return `${first}${CONT_SUFFIX}`;
+  }
+
+  return takeSmsChunk(clean, ASK_SMS_LIMIT);
+}
+
+async function handleContinue(env, from) {
+  const tail = await getScratch(env, from);
+  if (!tail) {
+    return "No saved reply. Try ask again.";
+  }
+
+  const first = takeSmsChunk(tail, ASK_SMS_LIMIT - CONT_SUFFIX.length);
+  const rest = tail.slice(first.length).trim();
+  if (rest) {
+    await saveScratch(env, from, rest);
+    return `${first}${CONT_SUFFIX}`;
+  }
+
+  await deleteScratch(env, from);
+  return first;
+}
+
+function compactAscii(text) {
+  return cleanAskText(text).replace(/\s+/g, " ").trim();
+}
+
+function takeSmsChunk(text, maxLength) {
+  const clean = compactAscii(text);
+  if (clean.length <= maxLength) {
+    return clean;
+  }
+
+  const boundary = clean.lastIndexOf(" ", maxLength);
+  if (boundary >= Math.floor(maxLength * 0.65)) {
+    return clean.slice(0, boundary).trim();
+  }
+
+  return clean.slice(0, maxLength).trim();
+}
+
+async function ensureScratch(env) {
+  if (!env?.SCRATCH) {
+    return false;
+  }
+
+  await env.SCRATCH.prepare(
+    "CREATE TABLE IF NOT EXISTS scratch (id TEXT PRIMARY KEY, tail TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+  ).run();
+  return true;
+}
+
+async function purgeOldScratch(env) {
+  if (!await ensureScratch(env)) {
+    return;
+  }
+
+  await env.SCRATCH.prepare("DELETE FROM scratch WHERE updated_at < ?")
+    .bind(Date.now() - SCRATCH_TTL_MS)
+    .run();
+}
+
+async function saveScratch(env, from, tail) {
+  const id = await scratchId(env, from);
+  if (!id || !await ensureScratch(env)) {
+    return false;
+  }
+
+  await env.SCRATCH.prepare(
+    "INSERT INTO scratch (id, tail, updated_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET tail = excluded.tail, updated_at = excluded.updated_at"
+  ).bind(id, tail, Date.now()).run();
+  return true;
+}
+
+async function getScratch(env, from) {
+  const id = await scratchId(env, from);
+  if (!id || !await ensureScratch(env)) {
+    return "";
+  }
+
+  const row = await env.SCRATCH.prepare("SELECT tail FROM scratch WHERE id = ?")
+    .bind(id)
+    .first();
+  return String(row?.tail || "").trim();
+}
+
+async function deleteScratch(env, from) {
+  const id = await scratchId(env, from);
+  if (!id || !await ensureScratch(env)) {
+    return;
+  }
+
+  await env.SCRATCH.prepare("DELETE FROM scratch WHERE id = ?")
+    .bind(id)
+    .run();
+}
+
+async function scratchId(env, from) {
+  const sender = String(from || "").trim();
+  if (!sender) {
+    return "";
+  }
+
+  const secret = String(env?.SCRATCH_SECRET || "sat-weather-scratch").trim();
+  const bytes = new TextEncoder().encode(`${secret}:${sender}`);
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function utmToLatLon(zone, easting, northing, northernHemisphere) {
@@ -656,6 +787,8 @@ const PROVINCES = {
 
 const APP_VERSION = "2026-06-19-aig-perplexity";
 const ASK_SMS_LIMIT = 306;
+const CONT_SUFFIX = " Reply cont";
+const SCRATCH_TTL_MS = 10 * 60 * 1000;
 const ASK_SYSTEM_PROMPT = [
   "You answer for a satellite SMS bot used when the sender has poor or no data service.",
   "Reply in plain ASCII text under 306 characters, ideally under 250.",
