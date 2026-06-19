@@ -90,11 +90,11 @@ async function callPerplexity(question, apiKey) {
 
   if (!response.ok) {
     const searchFallback = await callPerplexitySearch(question, cleanKey);
-    if (searchFallback) {
+    if (searchFallback.ok) {
       return {
         choices: [{
           message: {
-            content: searchFallback,
+            content: searchFallback.text,
           },
         }],
       };
@@ -103,7 +103,7 @@ async function callPerplexity(question, apiKey) {
     return {
       choices: [{
         message: {
-          content: `Ask unavailable ${APP_VERSION}: Perplexity ${response.status} ${await shortProviderError(response)}`,
+          content: `Ask unavailable ${APP_VERSION}: chat ${response.status} ${await shortProviderError(response)}; search ${searchFallback.status} ${searchFallback.error}`,
         },
       }],
     };
@@ -127,16 +127,27 @@ async function callPerplexitySearch(question, apiKey) {
   });
 
   if (!response.ok) {
-    return null;
+    return {
+      ok: false,
+      status: response.status,
+      error: await shortProviderError(response),
+    };
   }
 
   const data = await response.json();
   const results = data.results || [];
   if (!results.length) {
-    return null;
+    return {
+      ok: false,
+      status: 200,
+      error: "no results",
+    };
   }
 
-  return formatSearchResults(results);
+  return {
+    ok: true,
+    text: formatSearchResults(results),
+  };
 }
 
 function formatSearchResults(results) {
