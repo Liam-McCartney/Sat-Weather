@@ -72,7 +72,7 @@ async function handleAsk(question, env) {
 async function callPerplexity(question, apiKey) {
   const cleanKey = String(apiKey || "").trim();
   const payload = JSON.stringify({
-    model: "sonar-pro",
+    model: "perplexity/sonar-pro",
     messages: [
       {
         role: "user",
@@ -81,7 +81,7 @@ async function callPerplexity(question, apiKey) {
     ],
   });
 
-  const response = await fetch("https://api.perplexity.ai/v1/sonar", {
+  const response = await fetch(PERPLEXITY_GATEWAY_URL, {
     method: "POST",
     headers: {
       "Accept": "application/json",
@@ -622,7 +622,8 @@ const PROVINCES = {
   yukon: "Yukon",
 };
 
-const APP_VERSION = "2026-06-18-pplx-min";
+const APP_VERSION = "2026-06-19-aig-perplexity";
+const PERPLEXITY_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/0220c3a82e8c2874e60132409274661c/sat-weather/compat/chat/completions";
 
 function twiml(message) {
   return new Response(
