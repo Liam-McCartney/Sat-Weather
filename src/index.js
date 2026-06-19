@@ -74,29 +74,61 @@ async function handleAsk(question, env) {
     `Question: ${question}`,
   ].join("\n");
 
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent", {
+  const data = await generateAskResponse(prompt, env.GEMINI_API_KEY);
+  const text = data.text;
+  return limitSms(text || "No answer returned.");
+}
+
+async function generateAskResponse(prompt, apiKey) {
+  const attempts = [
+    { model: "gemini-3.5-flash", grounded: true },
+    { model: "gemini-2.5-flash", grounded: true },
+    { model: "gemini-2.0-flash", grounded: true },
+    { model: "gemini-3.5-flash", grounded: false },
+    { model: "gemini-2.5-flash", grounded: false },
+    { model: "gemini-2.0-flash", grounded: false },
+  ];
+
+  const errors = [];
+  for (const attempt of attempts) {
+    const response = await callGemini(prompt, apiKey, attempt);
+    if (response.ok) {
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
+      if (text) {
+        return { text };
+      }
+      errors.push(`${attempt.model}: empty`);
+      continue;
+    }
+
+    errors.push(`${attempt.model}${attempt.grounded ? "+search" : ""}: ${response.status}`);
+  }
+
+  return { text: `Ask unavailable (${errors.slice(0, 3).join("; ")}). Check Gemini key/API access.` };
+}
+
+function callGemini(prompt, apiKey, attempt) {
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 140,
+    },
+  };
+
+  if (attempt.grounded) {
+    body.tools = [{ google_search: {} }];
+  }
+
+  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${attempt.model}:generateContent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-goog-api-key": env.GEMINI_API_KEY,
+      "x-goog-api-key": apiKey,
     },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 140,
-      },
-    }),
+    body: JSON.stringify(body),
   });
-
-  if (!response.ok) {
-    throw new Error(`Gemini failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim();
-  return limitSms(text || "No answer returned.");
 }
 
 function parseCommand(message) {
