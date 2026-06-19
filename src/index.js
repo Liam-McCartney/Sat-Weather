@@ -71,21 +71,24 @@ async function handleAsk(question, env) {
 
 async function callPerplexity(question, apiKey) {
   const cleanKey = String(apiKey || "").trim();
+  const payload = JSON.stringify({
+    model: "sonar-pro",
+    messages: [
+      {
+        role: "user",
+        content: question,
+      },
+    ],
+  });
+
   const response = await fetch("https://api.perplexity.ai/chat/completions", {
     method: "POST",
     headers: {
+      "Accept": "application/json",
       "Authorization": `Bearer ${cleanKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: "sonar-pro",
-      messages: [
-        {
-          role: "user",
-          content: question,
-        },
-      ],
-    }),
+    body: new TextEncoder().encode(payload),
   });
 
   if (!response.ok) {
@@ -113,17 +116,20 @@ async function callPerplexity(question, apiKey) {
 }
 
 async function callPerplexitySearch(question, apiKey) {
+  const payload = JSON.stringify({
+    query: question,
+    max_results: 3,
+    search_context_size: "low",
+  });
+
   const response = await fetch("https://api.perplexity.ai/search", {
     method: "POST",
     headers: {
+      "Accept": "application/json",
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      query: question,
-      max_results: 3,
-      search_context_size: "low",
-    }),
+    body: new TextEncoder().encode(payload),
   });
 
   if (!response.ok) {
