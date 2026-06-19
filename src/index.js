@@ -102,10 +102,10 @@ async function generateAskResponse(prompt, apiKey) {
       continue;
     }
 
-    errors.push(`${attempt.model}${attempt.grounded ? "+search" : ""}: ${response.status}`);
+    errors.push(`${attempt.model}${attempt.grounded ? "+search" : ""}: ${response.status} ${await shortError(response)}`);
   }
 
-  return { text: `Ask unavailable (${errors.slice(0, 3).join("; ")}). Check Gemini key/API access.` };
+  return { text: `Ask unavailable (${errors.slice(0, 2).join("; ")}).` };
 }
 
 function callGemini(prompt, apiKey, attempt) {
@@ -129,6 +129,16 @@ function callGemini(prompt, apiKey, attempt) {
     },
     body: JSON.stringify(body),
   });
+}
+
+async function shortError(response) {
+  const body = await response.text();
+  try {
+    const parsed = JSON.parse(body);
+    return limitSms(parsed.error?.message || body, 120);
+  } catch {
+    return limitSms(body, 120);
+  }
 }
 
 function parseCommand(message) {
