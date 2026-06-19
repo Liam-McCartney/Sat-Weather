@@ -17,7 +17,12 @@ export class GeminiTestService {
     if (!gateway.ok) {
       const direct = await this.callGemini(GEMINI_DIRECT_URL, cleanKey, payload);
       if (!direct.ok) {
-        return `Gemini unavailable: gw ${gateway.status} ${gateway.error}; direct ${direct.status} ${direct.error}`;
+        const openAi = await this.callGeminiOpenAi(cleanKey, question);
+        if (!openAi.ok) {
+          return `Gemini unavailable: gw ${gateway.status} ${gateway.error}; native ${direct.status} ${direct.error}; compat ${openAi.status} ${openAi.error}`;
+        }
+
+        return this.formatOpenAiResponse(openAi.data);
       }
 
       return this.formatResponse(direct.data);
@@ -34,6 +39,44 @@ export class GeminiTestService {
         "x-goog-api-key": apiKey,
       },
       body: payload,
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: await shortProviderError(response),
+      };
+    }
+
+    return {
+      ok: true,
+      data: await response.json(),
+    };
+  }
+
+  async callGeminiOpenAi(apiKey, question) {
+    const response = await fetch(GEMINI_OPENAI_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gemini-3.5-flash",
+        max_tokens: 120,
+        temperature: 0,
+        messages: [
+          {
+            role: "system",
+            content: ASK_SYSTEM_PROMPT,
+          },
+          {
+            role: "user",
+            content: question,
+          },
+        ],
+      }),
     });
 
     if (!response.ok) {
@@ -82,6 +125,11 @@ export class GeminiTestService {
       .join(" ") || "No answer returned.";
     return takeSmsChunk(cleanAskText(text), ASK_SMS_LIMIT);
   }
+
+  formatOpenAiResponse(data) {
+    const text = data.choices?.[0]?.message?.content || "No answer returned.";
+    return takeSmsChunk(cleanAskText(text), ASK_SMS_LIMIT);
+  }
 }
 
 export function parseGeminiTest(message) {
@@ -104,3 +152,4 @@ async function shortProviderError(response) {
 }
 
 const GEMINI_DIRECT_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+const GEMINI_OPENAI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
