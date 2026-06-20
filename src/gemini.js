@@ -36,11 +36,6 @@ export class GeminiService {
   }
 
   async callGemini(question, apiKey) {
-    const compat = await this.callGeminiCompat(apiKey, question);
-    if (compat.ok) {
-      return compat.data;
-    }
-
     const nativePayload = this.nativePayload(question);
     const gateway = await this.callGeminiNative(GEMINI_GATEWAY_URL, apiKey, nativePayload);
     if (gateway.ok) {
@@ -52,8 +47,13 @@ export class GeminiService {
       return direct.data;
     }
 
+    const compat = await this.callGeminiCompat(apiKey, question);
+    if (compat.ok) {
+      return compat.data;
+    }
+
     throw new Error(
-      `Gemini unavailable: compat ${compat.status} ${compat.error}; gateway ${gateway.status} ${gateway.error}; native ${direct.status} ${direct.error}`
+      `Gemini unavailable: gateway ${gateway.status} ${gateway.error}; native ${direct.status} ${direct.error}; compat ${compat.status} ${compat.error}`
     );
   }
 
@@ -140,6 +140,7 @@ export class GeminiService {
       ],
       generationConfig: {
         maxOutputTokens: 220,
+        responseMimeType: "text/plain",
         temperature: 0,
       },
     });
