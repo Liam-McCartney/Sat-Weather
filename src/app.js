@@ -60,7 +60,7 @@ function helpReply(message) {
   }
 
   if (/^rv help$/i.test(message)) {
-    return "RV: rv river prov. Use section/town if known. Ex: rv lower madawaska on; rv upper petawawa on; rv 02KB001 on";
+    return "RV: rv river prov, or rv gauge_id. Use section/town if known. Ex: rv lower madawaska on; rv upper petawawa on; rv 02KB001";
   }
 
   if (/^(?:ask|askp|gemini) help$/i.test(message)) {

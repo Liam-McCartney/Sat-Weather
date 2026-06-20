@@ -90,12 +90,22 @@ export class HydroService {
   async answer(query) {
     await this.store.syncStationsIfStale();
 
+    const stationId = parseStationId(query);
+    if (stationId) {
+      const station = await this.store.findStationByNumber(stationId);
+      return this.answerStation(station);
+    }
+
     const parsed = parseHydroQuery(query);
     if (!parsed) {
-      return "Use: rv river name prov. Ex: rv lower madawaska on";
+      return "Use: rv river name prov, or rv gauge_id. Ex: rv lower madawaska on; rv 02KB001";
     }
 
     const station = await this.resolveStation(parsed);
+    return this.answerStation(station);
+  }
+
+  async answerStation(station) {
     if (!station) {
       if (this.lastCandidates?.length) {
         return formatCandidates(this.lastCandidates);
@@ -118,7 +128,7 @@ export class HydroService {
       return alias;
     }
 
-    const stationId = parsed.queryText.match(/\b\d{2}[a-z]{2}\d{3}\b/i)?.[0];
+    const stationId = parseStationId(parsed.queryText);
     if (stationId) {
       return this.store.findStationByNumber(stationId);
     }
@@ -199,6 +209,10 @@ export class HydroService {
       return null;
     }
   }
+}
+
+function parseStationId(query) {
+  return query.match(/\b\d{2}[a-z]{2}\d{3}\b/i)?.[0].toUpperCase() || "";
 }
 
 function parseHydroQuery(query) {
