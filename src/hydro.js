@@ -167,8 +167,10 @@ export class HydroService {
     }
 
     const prompt = [
-      "Choose the best Hydro Canada gauge for this paddler river query.",
-      "Only choose from the listed candidates. If uncertain, return null station_number.",
+      "Choose the best Hydro Canada gauge for this paddler river section query.",
+      "Use a quick web search for paddling beta, trip reports, river descriptions, gauge notes, and section names.",
+      "The section words upper, middle, mid, and lower are important paddler context. Do not ignore them.",
+      "Only choose from the listed Hydro candidates. If web context does not clearly support a candidate, return null station_number.",
       `Query: ${parsed.queryText} ${parsed.province}`,
       "Return JSON only: {\"station_number\":\"...\",\"confidence\":0.0,\"reason\":\"short\"}",
       "Candidates:",
@@ -179,7 +181,11 @@ export class HydroService {
 
     try {
       const service = new GeminiService(this.env, this.scratchBook);
-      const data = await service.callGemini(prompt, String(this.env.GEMINI_API_KEY || "").trim());
+      const data = await service.callGemini(prompt, String(this.env.GEMINI_API_KEY || "").trim(), {
+        grounding: true,
+        maxOutputTokens: 300,
+        systemPrompt: "You resolve Canadian paddling river section names to official Hydro Canada gauges. Use grounded web context when available. Return only valid JSON.",
+      });
       const parsedJson = parseJson(service.extractText(data));
       const stationNumber = String(parsedJson?.station_number || "").toUpperCase();
       const confidence = Number(parsedJson?.confidence || 0);

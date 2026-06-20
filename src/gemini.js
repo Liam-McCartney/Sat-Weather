@@ -13,7 +13,10 @@ export class GeminiService {
       return "Gemini not configured. Add GEMINI_API_KEY as a Cloudflare Worker secret.";
     }
 
-    const data = await this.callGemini(question, cleanKey);
+    const data = await this.callGemini(question, cleanKey, {
+      grounding: true,
+      maxOutputTokens: 700,
+    });
     const text = this.extractText(data);
     return this.chunkReply(from, cleanAskText(text || "No answer returned."));
   }
@@ -35,8 +38,8 @@ export class GeminiService {
     return takeSmsChunk(clean, ASK_SMS_LIMIT);
   }
 
-  async callGemini(question, apiKey) {
-    const nativePayload = this.nativePayload(question);
+  async callGemini(question, apiKey, options = {}) {
+    const nativePayload = this.nativePayload(question, options);
     const gateway = await this.callGeminiNative(GEMINI_GATEWAY_URL, apiKey, nativePayload);
     if (gateway.ok) {
       return gateway.data;
@@ -47,7 +50,7 @@ export class GeminiService {
       return direct.data;
     }
 
-    const compat = await this.callGeminiCompat(apiKey, question);
+    const compat = await this.callGeminiCompat(apiKey, question, options);
     if (compat.ok) {
       return compat.data;
     }
@@ -57,7 +60,7 @@ export class GeminiService {
     );
   }
 
-  async callGeminiCompat(apiKey, question) {
+  async callGeminiCompat(apiKey, question, options = {}) {
     const response = await fetch(GEMINI_OPENAI_URL, {
       method: "POST",
       headers: {
@@ -66,12 +69,12 @@ export class GeminiService {
       },
       body: JSON.stringify({
         model: "gemini-3.5-flash",
-        max_tokens: 220,
+        max_tokens: options.maxOutputTokens || 700,
         temperature: 0,
         messages: [
           {
             role: "system",
-            content: ASK_SYSTEM_PROMPT,
+            content: options.systemPrompt || ASK_SYSTEM_PROMPT,
           },
           {
             role: "user",
@@ -119,12 +122,12 @@ export class GeminiService {
     };
   }
 
-  nativePayload(question) {
-    return JSON.stringify({
+  nativePayload(question, options = {}) {
+    const payload = {
       systemInstruction: {
         parts: [
           {
-            text: ASK_SYSTEM_PROMPT,
+            text: options.systemPrompt || ASK_SYSTEM_PROMPT,
           },
         ],
       },
@@ -139,11 +142,21 @@ export class GeminiService {
         },
       ],
       generationConfig: {
-        maxOutputTokens: 220,
+        maxOutputTokens: options.maxOutputTokens || 700,
         responseMimeType: "text/plain",
         temperature: 0,
       },
-    });
+    };
+
+    if (options.grounding) {
+      payload.tools = [
+        {
+          google_search: {},
+        },
+      ];
+    }
+
+    return JSON.stringify(payload);
   }
 
   extractText(data) {
