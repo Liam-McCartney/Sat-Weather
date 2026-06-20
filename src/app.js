@@ -1,5 +1,5 @@
 import { AskService, isContinue, parseAsk } from "./ask.js";
-import { GeminiTestService, parseGeminiTest } from "./gemini.js";
+import { GeminiService, parseGemini } from "./gemini.js";
 import { ScratchBook } from "./scratchbook.js";
 import { weatherReply } from "./weather.js";
 
@@ -21,9 +21,9 @@ export async function handleMessage(message, env, from) {
     return askService.answer(ask, from);
   }
 
-  const gemini = parseGeminiTest(message);
+  const gemini = parseGemini(message);
   if (gemini) {
-    return new GeminiTestService(env).answer(gemini);
+    return new GeminiService(env, scratchBook).answer(gemini, from);
   }
 
   const weather = await weatherReply(message);

@@ -1,61 +1,63 @@
-import { ASK_SMS_LIMIT, ASK_SYSTEM_PROMPT, GEMINI_GATEWAY_URL } from "./config.js";
-import { cleanAskText, limitSms, takeSmsChunk } from "./text.js";
+import { ASK_SMS_LIMIT, ASK_SYSTEM_PROMPT, CONT_SUFFIX, GEMINI_GATEWAY_URL } from "./config.js";
+import { cleanAskText, compactAscii, limitSms, takeSmsChunk } from "./text.js";
 
-export class GeminiTestService {
-  constructor(env) {
+export class GeminiService {
+  constructor(env, scratchBook) {
     this.env = env;
+    this.scratchBook = scratchBook;
   }
 
-  async answer(question) {
+  async answer(question, from) {
     const cleanKey = String(this.env?.GEMINI_API_KEY || "").trim();
     if (!cleanKey) {
       return "Gemini not configured. Add GEMINI_API_KEY as a Cloudflare Worker secret.";
     }
 
-    const payload = this.payload(question);
-    const gateway = await this.callGemini(GEMINI_GATEWAY_URL, cleanKey, payload);
-    if (!gateway.ok) {
-      const direct = await this.callGemini(GEMINI_DIRECT_URL, cleanKey, payload);
-      if (!direct.ok) {
-        const openAi = await this.callGeminiOpenAi(cleanKey, question);
-        if (!openAi.ok) {
-          return `Gemini unavailable: keyLen ${cleanKey.length}; gw ${gateway.status} ${gateway.error}; native ${direct.status} ${direct.error}; compat ${openAi.status} ${openAi.error}`;
-        }
-
-        return this.formatOpenAiResponse(openAi.data);
-      }
-
-      return this.formatResponse(direct.data);
-    }
-
-    return this.formatResponse(gateway.data);
+    const data = await this.callGemini(question, cleanKey);
+    const text = this.extractText(data);
+    return this.chunkReply(from, cleanAskText(text || "No answer returned."));
   }
 
-  async callGemini(url, apiKey, payload) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: payload,
-    });
+  async chunkReply(from, text) {
+    const clean = compactAscii(text);
+    const first = takeSmsChunk(clean, ASK_SMS_LIMIT - CONT_SUFFIX.length);
+    const tail = clean.slice(first.length).trim();
 
-    if (!response.ok) {
-      return {
-        ok: false,
-        status: response.status,
-        error: await shortProviderError(response),
-      };
+    if (!tail) {
+      await this.scratchBook.delete(from);
+      return clean;
     }
 
-    return {
-      ok: true,
-      data: await response.json(),
-    };
+    if (await this.scratchBook.save(from, tail)) {
+      return `${first}${CONT_SUFFIX}`;
+    }
+
+    return takeSmsChunk(clean, ASK_SMS_LIMIT);
   }
 
-  async callGeminiOpenAi(apiKey, question) {
+  async callGemini(question, apiKey) {
+    const compat = await this.callGeminiCompat(apiKey, question);
+    if (compat.ok) {
+      return compat.data;
+    }
+
+    const nativePayload = this.nativePayload(question);
+    const gateway = await this.callGeminiNative(GEMINI_GATEWAY_URL, apiKey, nativePayload);
+    if (gateway.ok) {
+      return gateway.data;
+    }
+
+    const direct = await this.callGeminiNative(GEMINI_DIRECT_URL, apiKey, nativePayload);
+    if (direct.ok) {
+      return direct.data;
+    }
+
+    throw new Error(
+      `Gemini unavailable: compat ${compat.status} ${compat.error}; gateway ${gateway.status} ${gateway.error}; native ${direct.status} ${direct.error}`
+    );
+  }
+
+  async callGeminiCompat(apiKey, question) {
     const response = await fetch(GEMINI_OPENAI_URL, {
       method: "POST",
       headers: {
@@ -64,7 +66,7 @@ export class GeminiTestService {
       },
       body: JSON.stringify({
         model: "gemini-3.5-flash",
-        max_tokens: 120,
+        max_tokens: 220,
         temperature: 0,
         messages: [
           {
@@ -93,46 +95,70 @@ export class GeminiTestService {
     };
   }
 
-  payload(question) {
+  async callGeminiNative(url, apiKey, payload) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: payload,
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: await shortProviderError(response),
+      };
+    }
+
+    return {
+      ok: true,
+      data: await response.json(),
+    };
+  }
+
+  nativePayload(question) {
     return JSON.stringify({
-        systemInstruction: {
+      systemInstruction: {
+        parts: [
+          {
+            text: ASK_SYSTEM_PROMPT,
+          },
+        ],
+      },
+      contents: [
+        {
+          role: "user",
           parts: [
             {
-              text: ASK_SYSTEM_PROMPT,
+              text: question,
             },
           ],
         },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: question,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          maxOutputTokens: 120,
-          temperature: 0,
-        },
+      ],
+      generationConfig: {
+        maxOutputTokens: 220,
+        temperature: 0,
+      },
     });
   }
 
-  formatResponse(data) {
-    const text = data.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || "")
-      .join(" ") || "No answer returned.";
-    return takeSmsChunk(cleanAskText(text), ASK_SMS_LIMIT);
-  }
+  extractText(data) {
+    const compatText = data.choices?.[0]?.message?.content;
+    if (compatText) {
+      return compatText;
+    }
 
-  formatOpenAiResponse(data) {
-    const text = data.choices?.[0]?.message?.content || "No answer returned.";
-    return takeSmsChunk(cleanAskText(text), ASK_SMS_LIMIT);
+    const nativeText = data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
+      .join(" ");
+    return nativeText || "";
   }
 }
 
-export function parseGeminiTest(message) {
+export function parseGemini(message) {
   const match = message.match(/^(?:wx\s+)?gemini\s+(.+)$/i);
   if (!match) {
     return null;
