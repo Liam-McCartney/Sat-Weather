@@ -43,15 +43,15 @@ export async function handleMessage(message, env, from) {
 }
 
 function helpText() {
-  return "Cmds: wx, rv, ask, askp, cont. Help: wx help; rv help; ask help.";
+  return "Cmds: wx, rv, ask, askp, cont. Help: bot help; wx help; rv help; ask help.";
 }
 
 function unknownCommandText() {
-  return "Unknown cmd. Try: help. Examples: wx tdy town prov; rv river prov; ask question; askp question; cont.";
+  return "Unknown cmd. Try: bot help. Examples: wx tdy town prov; rv river prov; ask question; askp question; cont.";
 }
 
 function helpReply(message) {
-  if (/^(?:help|general help)$/i.test(message)) {
+  if (/^bot help$/i.test(message)) {
     return helpText();
   }
 

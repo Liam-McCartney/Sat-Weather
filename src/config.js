@@ -1,4 +1,4 @@
-export const APP_VERSION = "2026-06-20-rv-id-readme";
+export const APP_VERSION = "2026-06-20-bot-help";
 
 export const ASK_SMS_LIMIT = 306;
 export const CONT_SUFFIX = " Reply cont";

@@ -74,7 +74,7 @@ async function safeHandleMessage(message, env, from) {
     return await handleMessage(message, env, from);
   } catch (error) {
     console.error(error);
-    return "Error. Try: help";
+    return "Error. Try: bot help";
   }
 }
 

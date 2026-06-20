@@ -4,7 +4,7 @@ Using Apple's satellite SMS capability to implement basic automated weather quer
 ## SMS Commands
 
 ```text
-help
+bot help
 wx help
 ask help
 rv help
@@ -24,7 +24,7 @@ cont
 Examples:
 
 ```text
-help
+bot help
 wx help
 wx tdy ottawa on
 wx tmr algonquin park on
