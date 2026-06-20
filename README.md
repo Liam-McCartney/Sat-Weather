@@ -5,9 +5,9 @@ Using Apple's satellite SMS capability to implement basic automated weather quer
 
 ```text
 bot help
-wx help
-ask help
-rv help
+bot wx
+bot ask
+bot rv
 wx tdy town prov
 wx tmr town prov
 wx wk town prov
@@ -25,15 +25,15 @@ Examples:
 
 ```text
 bot help
-wx help
+bot wx
 wx tdy ottawa on
 wx tmr algonquin park on
 wx wk vancouver bc
 wx tdy utm 17T 630084 4833438
-rv help
+bot rv
 rv lower madawaska on
 rv 02KB001
-ask help
+bot ask
 ask habs game score
 askp habs game score
 cont

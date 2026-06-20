@@ -43,7 +43,7 @@ export async function handleMessage(message, env, from) {
 }
 
 function helpText() {
-  return "Cmds: wx, rv, ask, askp, cont. Help: bot help; wx help; rv help; ask help.";
+  return "Cmds: wx, rv, ask, askp, cont. Info: bot help; bot wx; bot rv; bot ask.";
 }
 
 function unknownCommandText() {
@@ -55,15 +55,15 @@ function helpReply(message) {
     return helpText();
   }
 
-  if (/^wx help$/i.test(message)) {
+  if (/^(?:wx help|bot wx)$/i.test(message)) {
     return "WX: wx tdy/tmr/wk town prov, or wx tdy/tmr/wk utm zone easting northing. Ex: wx tdy ottawa on";
   }
 
-  if (/^rv help$/i.test(message)) {
+  if (/^(?:rv help|bot rv)$/i.test(message)) {
     return "RV: rv river prov, or rv gauge_id. Use section/town if known. Ex: rv lower madawaska on; rv upper petawawa on; rv 02KB001";
   }
 
-  if (/^(?:ask|askp|gemini) help$/i.test(message)) {
+  if (/^(?:(?:ask|askp|gemini) help|bot ask)$/i.test(message)) {
     return "ASK: ask question uses Gemini web search. askp question uses Perplexity. Send cont for the next saved chunk.";
   }
 
