@@ -65,6 +65,9 @@ const STOP_WORDS = new Set([
   "near",
   "above",
   "below",
+  "upper",
+  "lower",
+  "middle",
   "the",
 ]);
 
