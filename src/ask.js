@@ -177,6 +177,15 @@ export function parseAsk(message) {
   return match[1].trim();
 }
 
+export function parseAskPerplexity(message) {
+  const match = message.match(/^(?:wx\s+)?askp\s+(.+)$/i);
+  if (!match) {
+    return null;
+  }
+
+  return match[1].trim();
+}
+
 export function isContinue(message) {
   return /^(?:wx\s+)?(?:cont|continue)$/i.test(message);
 }

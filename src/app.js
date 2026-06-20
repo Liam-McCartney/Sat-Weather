@@ -1,4 +1,4 @@
-import { AskService, isContinue, parseAsk } from "./ask.js";
+import { AskService, isContinue, parseAsk, parseAskPerplexity } from "./ask.js";
 import { GeminiService, parseGemini } from "./gemini.js";
 import { HydroService, parseRiverCommand } from "./hydro.js";
 import { ScratchBook } from "./scratchbook.js";
@@ -8,8 +8,9 @@ export async function handleMessage(message, env, from) {
   const scratchBook = new ScratchBook(env);
   await scratchBook.purgeOld();
 
-  if (/^(wx\s+)?help$/i.test(message)) {
-    return helpText();
+  const help = helpReply(message);
+  if (help) {
+    return help;
   }
 
   const askService = new AskService(env, scratchBook);
@@ -17,9 +18,14 @@ export async function handleMessage(message, env, from) {
     return askService.continue(from);
   }
 
+  const askp = parseAskPerplexity(message);
+  if (askp) {
+    return askService.answer(askp, from);
+  }
+
   const ask = parseAsk(message);
   if (ask) {
-    return askService.answer(ask, from);
+    return new GeminiService(env, scratchBook).answer(ask, from);
   }
 
   const gemini = parseGemini(message);
@@ -33,9 +39,33 @@ export async function handleMessage(message, env, from) {
   }
 
   const weather = await weatherReply(message);
-  return weather || "Use: wx tdy town prov | wx tdy utm zone easting northing";
+  return weather || unknownCommandText();
 }
 
 function helpText() {
-  return "Cmds: wx tdy/tmr/wk town prov; wx tdy utm zone easting northing; rv river prov; ask question; cont.";
+  return "Cmds: wx, rv, ask, askp, cont. Help: wx help; rv help; ask help.";
+}
+
+function unknownCommandText() {
+  return "Unknown cmd. Try: help. Examples: wx tdy town prov; rv river prov; ask question; askp question; cont.";
+}
+
+function helpReply(message) {
+  if (/^(?:help|general help)$/i.test(message)) {
+    return helpText();
+  }
+
+  if (/^wx help$/i.test(message)) {
+    return "WX: wx tdy/tmr/wk town prov, or wx tdy/tmr/wk utm zone easting northing. Ex: wx tdy ottawa on";
+  }
+
+  if (/^rv help$/i.test(message)) {
+    return "RV: rv river prov. Use section/town if known. Ex: rv lower madawaska on; rv upper petawawa on; rv 02KB001 on";
+  }
+
+  if (/^(?:ask|askp|gemini) help$/i.test(message)) {
+    return "ASK: ask question uses Gemini web search. askp question uses Perplexity. Send cont for the next saved chunk.";
+  }
+
+  return "";
 }
