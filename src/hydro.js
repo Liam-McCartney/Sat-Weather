@@ -94,6 +94,10 @@ export class HydroService {
 
     const station = await this.resolveStation(parsed);
     if (!station) {
+      if (this.lastCandidates?.length) {
+        return formatCandidates(this.lastCandidates);
+      }
+
       return "No gauge match. Try river plus province and nearby town/dam.";
     }
 
@@ -120,6 +124,7 @@ export class HydroService {
     if (!candidates.length) {
       return null;
     }
+    this.lastCandidates = candidates.slice(0, 3);
 
     const [top, second] = candidates;
     if (top.score >= 55 && (!second || top.score - second.score >= 18)) {
@@ -281,9 +286,16 @@ async function latestReading(stationNumber) {
 
 function formatReading(station, reading) {
   const flow = reading.discharge === null ? "flow n/a" : `${roundReading(reading.discharge)} m3/s`;
-  const level = reading.level === null ? "" : `, level ${roundReading(reading.level)} m`;
+  const level = reading.level === null ? "" : `, level ${roundLevel(reading.level)} m`;
   const time = compactTime(reading.localDatetime || reading.datetime);
   return compactText(`${shortStation(station)}: ${flow}${level}. ${time}.`, 306);
+}
+
+function formatCandidates(candidates) {
+  const text = candidates
+    .map((candidate) => `${candidate.stationName} ${candidate.stationNumber}`)
+    .join("; ");
+  return compactText(`Ambiguous. Try more detail: ${text}`, 306);
 }
 
 function shortStation(station) {
@@ -307,6 +319,10 @@ function roundReading(value) {
     return String(Math.round(value * 10) / 10);
   }
 
+  return String(Math.round(value * 100) / 100);
+}
+
+function roundLevel(value) {
   return String(Math.round(value * 100) / 100);
 }
 
