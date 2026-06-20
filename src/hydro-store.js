@@ -14,6 +14,9 @@ export class HydroStore {
     await this.db.prepare(
       "CREATE TABLE IF NOT EXISTS hydro_stations (station_number TEXT PRIMARY KEY, station_name TEXT NOT NULL, province TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, real_time INTEGER NOT NULL, status TEXT NOT NULL, search_text TEXT NOT NULL, updated_at INTEGER NOT NULL)"
     ).run();
+    await this.db.prepare(
+      "CREATE TABLE IF NOT EXISTS hydro_aliases (alias TEXT PRIMARY KEY, province TEXT, station_number TEXT NOT NULL, label TEXT, source TEXT NOT NULL DEFAULT 'manual', updated_at INTEGER NOT NULL)"
+    ).run();
     return true;
   }
 
@@ -38,6 +41,67 @@ export class HydroStore {
       count: stations.length,
       updatedAt: Date.now(),
     };
+  }
+
+  async syncStationsIfStale() {
+    if (!await this.ensureReady()) {
+      throw new Error("SCRATCH D1 binding not available.");
+    }
+
+    const row = await this.db.prepare("SELECT MAX(updated_at) AS updated_at FROM hydro_stations").first();
+    const updatedAt = Number(row?.updated_at || 0);
+    if (updatedAt && sameUtcDay(updatedAt, Date.now())) {
+      return {
+        synced: false,
+        updatedAt,
+      };
+    }
+
+    const result = await this.syncStations();
+    return {
+      synced: true,
+      updatedAt: result.updatedAt,
+      count: result.count,
+    };
+  }
+
+  async findAlias(alias, province) {
+    if (!await this.ensureReady()) {
+      return null;
+    }
+
+    const normalizedAlias = normalizeSearchText(alias);
+    const row = await this.db.prepare(
+      "SELECT a.station_number, a.label, s.station_name, s.province, s.lat, s.lon, s.search_text FROM hydro_aliases a JOIN hydro_stations s ON s.station_number = a.station_number WHERE a.alias = ? AND (a.province IS NULL OR a.province = ?)"
+    ).bind(normalizedAlias, province).first();
+    return row ? stationFromRow(row, 1000) : null;
+  }
+
+  async findStationByNumber(stationNumber) {
+    if (!await this.ensureReady()) {
+      return null;
+    }
+
+    const row = await this.db.prepare(
+      "SELECT station_number, station_name, province, lat, lon, search_text FROM hydro_stations WHERE station_number = ?"
+    ).bind(stationNumber.toUpperCase()).first();
+    return row ? stationFromRow(row, 1000) : null;
+  }
+
+  async stationsForProvinces(provinces) {
+    if (!await this.ensureReady()) {
+      return [];
+    }
+
+    if (!provinces.length) {
+      return [];
+    }
+
+    const placeholders = provinces.map(() => "?").join(",");
+    const result = await this.db.prepare(
+      `SELECT station_number, station_name, province, lat, lon, search_text FROM hydro_stations WHERE province IN (${placeholders})`
+    ).bind(...provinces).all();
+    return (result.results || []).map((row) => stationFromRow(row, 0));
   }
 
   async replaceStations(stations) {
@@ -132,4 +196,26 @@ function normalizeSearchText(value) {
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function sameUtcDay(leftMs, rightMs) {
+  const left = new Date(leftMs).toISOString().slice(0, 10);
+  const right = new Date(rightMs).toISOString().slice(0, 10);
+  return left === right;
+}
+
+function stationFromRow(row, score) {
+  return {
+    stationNumber: row.station_number,
+    stationName: row.station_name || row.label,
+    province: row.province,
+    lat: Number(row.lat),
+    lon: Number(row.lon),
+    searchText: row.search_text || normalizeSearchText(row.station_name || row.label || ""),
+    score,
+  };
+}
+
+export function normalizeHydroText(value) {
+  return normalizeSearchText(value);
 }
