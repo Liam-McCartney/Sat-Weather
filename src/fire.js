@@ -15,13 +15,7 @@ export async function fireReply(message) {
     return `No match for ${query.locationText}. Try nearest larger town or UTM.`;
   }
 
-  const shouldReverse = !location.provinceCode || location.provinceCode === "NS";
-  const admin = shouldReverse ? await reverseAdmin(location.lat, location.lon) : {
-    province: location.province,
-    provinceCode: location.provinceCode,
-    county: "",
-    municipality: "",
-  };
+  const admin = await adminForLocation(location);
 
   const provinceCode = admin.provinceCode || location.provinceCode;
   if (!provinceCode) {
@@ -29,7 +23,7 @@ export async function fireReply(message) {
   }
 
   const adapter = FIRE_ADAPTERS[provinceCode] || unsupportedAdapter;
-  const result = await adapter({ location, admin });
+  const result = await adapter({ location, admin, query });
   return formatFireReply(result);
 }
 
@@ -67,10 +61,10 @@ async function ontarioAdapter({ location }) {
   };
 }
 
-async function novaScotiaAdapter({ location, admin }) {
+async function novaScotiaAdapter({ location, admin, query }) {
   const html = await fetchText(NS_BURNSAFE_URL);
   const updated = textMatch(html, /Last updated:\s*([^<]+)/i);
-  const county = normalizeCounty(admin.county);
+  const county = normalizeCounty(admin.county) || inferNovaScotiaCounty(query.location, location);
 
   if (!county) {
     return {
@@ -80,7 +74,7 @@ async function novaScotiaAdapter({ location, admin }) {
       authority: "Nova Scotia BurnSafe",
       updated,
       confidence: "official-html",
-      note: "Try nearest county name through ask if needed.",
+      note: "Try fx county ns, e.g. fx Halifax County ns.",
     };
   }
 
@@ -94,6 +88,32 @@ async function novaScotiaAdapter({ location, admin }) {
     confidence: "official-html",
     note: "",
   };
+}
+
+async function adminForLocation(location) {
+  const fallback = {
+    province: location.province,
+    provinceCode: location.provinceCode,
+    county: "",
+    municipality: "",
+  };
+
+  if (location.provinceCode && location.provinceCode !== "NS") {
+    return fallback;
+  }
+
+  try {
+    const admin = await reverseAdmin(location.lat, location.lon);
+    return {
+      ...fallback,
+      ...admin,
+      provinceCode: admin.provinceCode || fallback.provinceCode,
+      province: admin.province || fallback.province,
+    };
+  } catch (error) {
+    console.error(error);
+    return fallback;
+  }
 }
 
 function sourceOnlyAdapter(code, authority, sourceType, note) {
@@ -161,6 +181,26 @@ function normalizeCounty(value) {
   return /county$/i.test(county) ? county : `${county} County`;
 }
 
+function inferNovaScotiaCounty(parsedLocation, location) {
+  const text = normalizeForLookup([
+    parsedLocation?.town,
+    location?.name,
+  ].filter(Boolean).join(" "));
+
+  for (const county of NOVA_SCOTIA_COUNTIES) {
+    const base = normalizeForLookup(county.replace(/\s+County$/i, ""));
+    if (text.includes(base)) {
+      return county;
+    }
+  }
+
+  return NOVA_SCOTIA_TOWN_COUNTIES[text] || "";
+}
+
+function normalizeForLookup(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 function textMatch(html, pattern) {
   const match = html.match(pattern);
   return match ? stripHtml(match[1]) : "";
@@ -201,4 +241,59 @@ const FIRE_ADAPTERS = {
   QC: sourceOnlyAdapter("QC", "SOPFEU restrictions", "map", "SOPFEU map backend lookup pending."),
   SK: sourceOnlyAdapter("SK", "Saskatchewan fire bans", "unique", "Community fire-ban lookup pending."),
   YT: sourceOnlyAdapter("YT", "Yukon wildfires/restrictions", "unique", "Official source was not scrape-friendly from shell; lookup pending."),
+};
+
+const NOVA_SCOTIA_COUNTIES = [
+  "Annapolis County",
+  "Antigonish County",
+  "Cape Breton County",
+  "Colchester County",
+  "Cumberland County",
+  "Digby County",
+  "Guysborough County",
+  "Halifax County",
+  "Hants County",
+  "Inverness County",
+  "Kings County",
+  "Lunenburg County",
+  "Pictou County",
+  "Queens County",
+  "Richmond County",
+  "Shelburne County",
+  "Victoria County",
+  "Yarmouth County",
+];
+
+const NOVA_SCOTIA_TOWN_COUNTIES = {
+  halifax: "Halifax County",
+  dartmouth: "Halifax County",
+  bedford: "Halifax County",
+  sackville: "Halifax County",
+  truro: "Colchester County",
+  tatamagouche: "Colchester County",
+  amherst: "Cumberland County",
+  parrsboro: "Cumberland County",
+  wolfville: "Kings County",
+  kentville: "Kings County",
+  bridgewater: "Lunenburg County",
+  lunenburg: "Lunenburg County",
+  "mahone bay": "Lunenburg County",
+  yarmouth: "Yarmouth County",
+  digby: "Digby County",
+  shelburne: "Shelburne County",
+  liverpool: "Queens County",
+  pictou: "Pictou County",
+  "new glasgow": "Pictou County",
+  antigonish: "Antigonish County",
+  guysborough: "Guysborough County",
+  inverness: "Inverness County",
+  "port hawkesbury": "Inverness County",
+  richmond: "Richmond County",
+  arichat: "Richmond County",
+  sydney: "Cape Breton County",
+  "glace bay": "Cape Breton County",
+  baddeck: "Victoria County",
+  windsor: "Hants County",
+  "annapolis royal": "Annapolis County",
+  middleton: "Annapolis County",
 };
