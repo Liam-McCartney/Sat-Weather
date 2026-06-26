@@ -76,12 +76,12 @@ Fire-ban data is uneven across Canada. The bot uses official sources where possi
 Current adapter groups:
 
 ```text
-api/map-style: AB, MB, ON
-full html scrape: NB, NL, NS, PE
-unique/in-between: BC, QC, SK, YT, NT, NU
+api/map-style: MB, ON
+structured/html scrape: BC, NB, NL, NS, PE
+unique/in-between: AB, QC, SK, YT, NT, NU
 ```
 
-Ontario currently scrapes the official provincial forest fire page for Restricted Fire Zone status. Nova Scotia currently scrapes the BurnSafe county table. Other provinces and territories have source-aware stubs that identify the likely official source class but do not yet perform a location-specific lookup.
+Ontario scrapes the official provincial forest fire page for Restricted Fire Zone status. Nova Scotia scrapes the BurnSafe county table. British Columbia estimates the nearest fire centre, then scrapes the official BC Wildfire fire-centre page for campfire/category status. Manitoba checks the provincial restriction table and the municipal ArcGIS point layer. Quebec is source-aware for SOPFEU, but point-level SOPFEU API matching is still pending. Other provinces and territories have source-aware stubs that identify the likely official source class but do not yet perform a location-specific lookup.
 
 ## River Levels
 

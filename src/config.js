@@ -1,4 +1,4 @@
-export const APP_VERSION = "2026-06-25-fx-adapters";
+export const APP_VERSION = "2026-06-26-fx-bc-mb-qc";
 
 export const ASK_SMS_LIMIT = 306;
 export const CONT_SUFFIX = " Reply cont";

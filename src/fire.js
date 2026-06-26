@@ -3,6 +3,9 @@ import { compactText } from "./text.js";
 
 const ON_FOREST_FIRES_URL = "https://www.ontario.ca/page/forest-fires";
 const NS_BURNSAFE_URL = "https://novascotia.ca/burnsafe/";
+const MB_RESTRICTIONS_JS_URL = "https://www.gov.mb.ca/conservation_fire/Restrictions/restrictions_2025.js";
+const MB_MUNICIPAL_QUERY_URL = "https://services.arcgis.com/mMUesHYPkXjaFGfS/arcgis/rest/services/Manitoba_Current_Municipal_Burning_Restrictions_Layer/FeatureServer/0/query";
+const BC_FIRE_CENTRE_BASE_URL = "https://www2.gov.bc.ca/gov/content/safety/wildfire-status/prevention/fire-bans-and-restrictions";
 
 export async function fireReply(message) {
   const query = parseFireCommand(message);
@@ -90,6 +93,61 @@ async function novaScotiaAdapter({ location, admin, query }) {
   };
 }
 
+async function britishColumbiaAdapter({ location, query }) {
+  const centre = inferBcFireCentre(location, query.location);
+  const html = await fetchText(`${BC_FIRE_CENTRE_BASE_URL}/${centre.slug}`);
+  const updated = textMatch(html, /Last updated on\s*([^<]+)/i);
+  const statuses = [
+    `campfire ${bcCategoryStatus(html, "Category 1 campfire")}`,
+    `cat2 ${bcCategoryStatus(html, "Category 2 open fire")}`,
+    `cat3 ${bcCategoryStatus(html, "Category 3 open fire")}`,
+  ].filter((part) => !part.endsWith(" "));
+
+  return {
+    provinceCode: "BC",
+    place: `${location.name}/${centre.shortName}`,
+    status: statuses.length ? statuses.join("; ") : "fire-centre status not found",
+    authority: "BCWS",
+    updated,
+    confidence: centre.confidence,
+    note: centre.note || "Local/park bans can also apply.",
+  };
+}
+
+async function manitobaAdapter({ location }) {
+  const [provincial, municipal] = await Promise.all([
+    manitobaProvincialSummary(),
+    manitobaMunicipalStatus(location),
+  ]);
+
+  const status = [
+    municipal,
+    provincial.status,
+  ].filter(Boolean).join("; ");
+
+  return {
+    provinceCode: "MB",
+    place: location.name,
+    status: status || "restriction status not found",
+    authority: "Manitoba fire restrictions",
+    updated: provincial.updated,
+    confidence: "official-js-arcgis",
+    note: "Municipal/local bans can change quickly.",
+  };
+}
+
+async function quebecAdapter({ location }) {
+  return {
+    provinceCode: "QC",
+    place: location.name,
+    status: "SOPFEU point-level lookup is not wired yet",
+    authority: "SOPFEU",
+    updated: "",
+    confidence: "official-map",
+    note: "Check SOPFEU/local municipality before burning.",
+  };
+}
+
 async function adminForLocation(location) {
   const fallback = {
     province: location.province,
@@ -155,6 +213,116 @@ async function fetchText(url) {
   return response.text();
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: {
+      "Accept": "application/json,text/plain",
+      "User-Agent": "Sat-Weather/0.1 (https://github.com/Liam-McCartney/Sat-Weather)",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Fire JSON source failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function bcCategoryStatus(html, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const afterLabel = html.match(new RegExp(`${escaped}[\\s\\S]{0,1800}`, "i"))?.[0] || "";
+  const status = afterLabel.match(/(?:alt|title)=["'](Allowed|Prohibited|Restricted)["']/i)?.[1]
+    || stripHtml(afterLabel).match(/\b(Allowed|Prohibited|Restricted)\b/i)?.[1]
+    || "";
+  return status.toLowerCase();
+}
+
+function inferBcFireCentre(location, parsedLocation) {
+  const text = normalizeForLookup([
+    parsedLocation?.town,
+    location?.name,
+  ].filter(Boolean).join(" "));
+
+  for (const [key, centre] of Object.entries(BC_TOWN_FIRE_CENTRES)) {
+    if (text.includes(key)) {
+      return { ...BC_FIRE_CENTRES[centre], confidence: "town-alias" };
+    }
+  }
+
+  const { lat, lon } = location;
+  if (lon <= -124 || (lat >= 53.2 && lon <= -121.8)) {
+    return { ...BC_FIRE_CENTRES.northwest, confidence: "coordinate-rough" };
+  }
+
+  if (lat >= 52.6) {
+    return { ...BC_FIRE_CENTRES.princeGeorge, confidence: "coordinate-rough" };
+  }
+
+  if (lat >= 51.5 && lon <= -120.2) {
+    return { ...BC_FIRE_CENTRES.cariboo, confidence: "coordinate-rough" };
+  }
+
+  if (lon >= -119.2 && lat <= 51.8) {
+    return { ...BC_FIRE_CENTRES.southeast, confidence: "coordinate-rough" };
+  }
+
+  if (lon <= -122 || text.includes("vancouver") || text.includes("victoria")) {
+    return { ...BC_FIRE_CENTRES.coastal, confidence: "coordinate-rough" };
+  }
+
+  return { ...BC_FIRE_CENTRES.kamloops, confidence: "coordinate-rough" };
+}
+
+async function manitobaProvincialSummary() {
+  const js = await fetchText(MB_RESTRICTIONS_JS_URL);
+  const assignment = js.match(/var data = ([\s\S]*?);/i)?.[1] || "";
+  const jsonText = Array.from(assignment.matchAll(/'((?:\\'|[^'])*)'/g))
+    .map((match) => match[1].replace(/\\'/g, "'"))
+    .join("");
+
+  if (!jsonText) {
+    return { status: "", updated: "" };
+  }
+
+  const areas = JSON.parse(jsonText);
+  const active = areas.filter((area) => String(area.restrict).toLowerCase() === "yes");
+  const updated = areas.find((area) => area.updated)?.updated || "";
+  if (!active.length) {
+    return { status: "provincial areas no restrictions", updated };
+  }
+
+  return { status: `provincial restrictions in areas ${active.map((area) => area.area).join(", ")}`, updated };
+}
+
+async function manitobaMunicipalStatus(location) {
+  const url = new URL(MB_MUNICIPAL_QUERY_URL);
+  url.searchParams.set("f", "json");
+  url.searchParams.set("geometry", `${location.lon},${location.lat}`);
+  url.searchParams.set("geometryType", "esriGeometryPoint");
+  url.searchParams.set("inSR", "4326");
+  url.searchParams.set("spatialRel", "esriSpatialRelIntersects");
+  url.searchParams.set("outFields", "Municipality,Restrictions_Flag,Current_Restrictions");
+  url.searchParams.set("returnGeometry", "false");
+
+  const data = await fetchJson(url.toString());
+  const attrs = data.features?.[0]?.attributes;
+  if (!attrs) {
+    return "municipality not found";
+  }
+
+  const municipality = titleCase(attrs.Municipality || "municipality");
+  const restriction = stripHtml(attrs.Current_Restrictions || "");
+  if (restriction) {
+    return `${municipality}: ${restriction}`;
+  }
+
+  if (attrs.Restrictions_Flag === 1) {
+    return `${municipality}: restriction flagged, details not listed`;
+  }
+
+  return `${municipality}: no municipal restriction listed`;
+}
+
 function sectionParagraph(html, heading) {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = html.match(new RegExp(`<h2[^>]*>\\s*${escaped}\\s*<\\/h2>\\s*<p>([\\s\\S]*?)<\\/p>`, "i"));
@@ -211,10 +379,16 @@ function stripHtml(value) {
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
+    .replace(/&mdash;|&ndash;/g, "-")
     .replace(/&#039;/g, "'")
     .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function titleCase(value) {
+  return String(value || "").toLowerCase().replace(/\b[a-z]/g, (char) => char.toUpperCase());
 }
 
 function formatFireReply(result) {
@@ -229,8 +403,8 @@ function trimSentence(value) {
 
 const FIRE_ADAPTERS = {
   AB: sourceOnlyAdapter("AB", "Alberta Fire Bans", "arcgis", "ArcGIS-style source; coordinate lookup pending."),
-  BC: sourceOnlyAdapter("BC", "BC Wildfire prohibitions", "structured-html", "Fire-centre/legal-order lookup pending; local bans may apply."),
-  MB: sourceOnlyAdapter("MB", "Manitoba fire restrictions", "arcgis", "Provincial and municipal ArcGIS lookup pending."),
+  BC: britishColumbiaAdapter,
+  MB: manitobaAdapter,
   NB: sourceOnlyAdapter("NB", "NB forest fire watch", "html", "HTML/status scrape pending."),
   NL: sourceOnlyAdapter("NL", "NL fire hazard/burning restrictions", "html", "HTML/status scrape pending."),
   NS: novaScotiaAdapter,
@@ -238,9 +412,83 @@ const FIRE_ADAPTERS = {
   NU: sourceOnlyAdapter("NU", "Nunavut wildfire restrictions", "unique", "Official source was not scrape-friendly from shell; lookup pending."),
   ON: ontarioAdapter,
   PE: sourceOnlyAdapter("PE", "PEI burning permits/restrictions", "html", "HTML/status scrape pending."),
-  QC: sourceOnlyAdapter("QC", "SOPFEU restrictions", "map", "SOPFEU map backend lookup pending."),
+  QC: quebecAdapter,
   SK: sourceOnlyAdapter("SK", "Saskatchewan fire bans", "unique", "Community fire-ban lookup pending."),
   YT: sourceOnlyAdapter("YT", "Yukon wildfires/restrictions", "unique", "Official source was not scrape-friendly from shell; lookup pending."),
+};
+
+const BC_FIRE_CENTRES = {
+  cariboo: {
+    shortName: "Cariboo FC",
+    slug: "cariboo-fire-centre-bans",
+    note: "Fire-centre match is approximate; local/park bans can also apply.",
+  },
+  coastal: {
+    shortName: "Coastal FC",
+    slug: "coastal-fire-centre-bans",
+    note: "Local/park bans can also apply.",
+  },
+  kamloops: {
+    shortName: "Kamloops FC",
+    slug: "kamloops-fire-centre-bans",
+    note: "Local/park bans can also apply.",
+  },
+  northwest: {
+    shortName: "Northwest FC",
+    slug: "northwest-fire-centre-bans",
+    note: "Fire-centre match is approximate; local/park bans can also apply.",
+  },
+  princeGeorge: {
+    shortName: "Prince George FC",
+    slug: "prince-george-fire-centre-bans",
+    note: "Fire-centre match is approximate; local/park bans can also apply.",
+  },
+  southeast: {
+    shortName: "Southeast FC",
+    slug: "southeast-fire-centre-bans",
+    note: "Local/park bans can also apply.",
+  },
+};
+
+const BC_TOWN_FIRE_CENTRES = {
+  vancouver: "coastal",
+  victoria: "coastal",
+  nanaimo: "coastal",
+  tofino: "coastal",
+  whistler: "coastal",
+  squamish: "coastal",
+  bella: "coastal",
+  "haida gwaii": "coastal",
+  kamloops: "kamloops",
+  kelowna: "kamloops",
+  vernon: "kamloops",
+  penticton: "kamloops",
+  merritt: "kamloops",
+  lytton: "kamloops",
+  lillooet: "kamloops",
+  revelstoke: "southeast",
+  cranbrook: "southeast",
+  fernie: "southeast",
+  nelson: "southeast",
+  castlegar: "southeast",
+  trail: "southeast",
+  golden: "southeast",
+  quesnel: "cariboo",
+  "williams lake": "cariboo",
+  "100 mile": "cariboo",
+  "hundred mile": "cariboo",
+  "prince george": "princeGeorge",
+  mackenzie: "princeGeorge",
+  valemount: "princeGeorge",
+  tumbler: "princeGeorge",
+  "fort st john": "princeGeorge",
+  dawson: "princeGeorge",
+  terrace: "northwest",
+  smithers: "northwest",
+  kitimat: "northwest",
+  prince: "northwest",
+  dease: "northwest",
+  atlin: "northwest",
 };
 
 const NOVA_SCOTIA_COUNTIES = [
