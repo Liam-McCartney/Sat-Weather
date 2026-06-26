@@ -1,4 +1,5 @@
 import { AskService, isContinue, parseAsk, parseAskPerplexity } from "./ask.js";
+import { fireReply } from "./fire.js";
 import { GeminiService, parseGemini } from "./gemini.js";
 import { HydroService, parseRiverCommand } from "./hydro.js";
 import { ScratchBook } from "./scratchbook.js";
@@ -38,16 +39,21 @@ export async function handleMessage(message, env, from) {
     return new HydroService(env, scratchBook).answer(river);
   }
 
+  const fire = await fireReply(message);
+  if (fire) {
+    return fire;
+  }
+
   const weather = await weatherReply(message);
   return weather || unknownCommandText();
 }
 
 function helpText() {
-  return "Cmds: wx, rv, ask, askp, cont. Info: bot help; bot wx; bot rv; bot ask.";
+  return "Cmds: wx, fx, rv, ask, askp, cont. Info: bot help; bot wx; bot fx; bot rv; bot ask.";
 }
 
 function unknownCommandText() {
-  return "Unknown cmd. Try: bot help. Examples: wx tdy town prov; rv river prov; ask question; askp question; cont.";
+  return "Unknown cmd. Try: bot help. Ex: wx tdy town prov; fx town prov; rv river prov; ask question; cont.";
 }
 
 function helpReply(message) {
@@ -56,7 +62,11 @@ function helpReply(message) {
   }
 
   if (/^(?:wx help|bot wx)$/i.test(message)) {
-    return "WX: wx tdy/tmr/wk town prov, or wx tdy/tmr/wk utm zone easting northing. Ex: wx tdy ottawa on";
+    return "WX: wx tdy/tmr/wk town prov, or wx tdy/tmr/wk [utm] zone easting northing. Ex: wx tdy ottawa on";
+  }
+
+  if (/^(?:fx help|bot fx)$/i.test(message)) {
+    return "FX: fx town prov, or fx [utm] zone easting northing. Official source coverage varies by province. Ex: fx algonquin park on";
   }
 
   if (/^(?:rv help|bot rv)$/i.test(message)) {

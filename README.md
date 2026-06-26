@@ -6,6 +6,7 @@ Using Apple's satellite SMS capability to implement basic automated weather quer
 ```text
 bot help
 bot wx
+bot fx
 bot ask
 bot rv
 wx tdy town prov
@@ -14,6 +15,10 @@ wx wk town prov
 wx tdy utm grid easting northing
 wx tmr utm grid easting northing
 wx wk utm grid easting northing
+wx tdy grid easting northing
+fx town prov
+fx utm grid easting northing
+fx grid easting northing
 rv river prov
 rv gauge_id
 ask question
@@ -30,6 +35,11 @@ wx tdy ottawa on
 wx tmr algonquin park on
 wx wk vancouver bc
 wx tdy utm 17T 630084 4833438
+wx tdy 17T 630084 4833438
+bot fx
+fx algonquin park on
+fx utm 17T 630084 4833438
+fx 17T 630084 4833438
 bot rv
 rv lower madawaska on
 rv 02KB001
@@ -39,9 +49,39 @@ askp habs game score
 cont
 ```
 
-Named places are geocoded, then converted to a weather forecast. UTM input is converted directly in the Worker and is usually the better option when working from a map in remote areas.
+Named places are geocoded, then converted to a weather forecast. UTM input is converted directly in the Worker and is usually the better option when working from a map in remote areas. The `utm` keyword is optional for UTM input, so both `wx tdy utm 17T ...` and `wx tdy 17T ...` work.
 
 Today and tomorrow return a day summary plus period breakdowns for overnight, morning, midday, afternoon, evening, and night. Week returns a compact daily summary.
+
+## Fire Restrictions
+
+The `fx` command checks fire restriction sources for a town/province or UTM coordinate:
+
+```text
+fx town prov
+fx utm grid easting northing
+fx grid easting northing
+```
+
+Examples:
+
+```text
+fx algonquin park on
+fx halifax ns
+fx 17T 630084 4833438
+```
+
+Fire-ban data is uneven across Canada. The bot uses official sources where possible and replies conservatively when an adapter is not wired yet.
+
+Current adapter groups:
+
+```text
+api/map-style: AB, MB, ON
+full html scrape: NB, NL, NS, PE
+unique/in-between: BC, QC, SK, YT, NT, NU
+```
+
+Ontario currently scrapes the official provincial forest fire page for Restricted Fire Zone status. Nova Scotia currently scrapes the BurnSafe county table. Other provinces and territories have source-aware stubs that identify the likely official source class but do not yet perform a location-specific lookup.
 
 ## River Levels
 
