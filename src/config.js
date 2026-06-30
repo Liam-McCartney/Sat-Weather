@@ -1,4 +1,4 @@
-export const APP_VERSION = "2026-06-30-spot-retry";
+export const APP_VERSION = "2026-06-30-spot-profiles";
 
 export const ASK_SMS_LIMIT = 306;
 export const CONT_SUFFIX = " Reply cont";

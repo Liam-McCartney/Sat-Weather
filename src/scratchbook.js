@@ -80,6 +80,30 @@ export class ScratchBook {
     return String(row?.reply || "").trim();
   }
 
+  async markConstrainedSender(from, profile = "spot") {
+    const id = await this.senderId(from);
+    if (!id || !await this.ensureReady()) {
+      return false;
+    }
+
+    await this.db.prepare(
+      "INSERT INTO sender_profile (id, profile, updated_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET profile = excluded.profile, updated_at = excluded.updated_at"
+    ).bind(id, profile, Date.now()).run();
+    return true;
+  }
+
+  async isConstrainedSender(from) {
+    const id = await this.senderId(from);
+    if (!id || !await this.ensureReady()) {
+      return false;
+    }
+
+    const row = await this.db.prepare("SELECT profile FROM sender_profile WHERE id = ?")
+      .bind(id)
+      .first();
+    return ["spot", "sat", "constrained"].includes(String(row?.profile || "").toLowerCase());
+  }
+
   async ensureReady() {
     if (!this.db) {
       return false;
@@ -90,6 +114,9 @@ export class ScratchBook {
     ).run();
     await this.db.prepare(
       "CREATE TABLE IF NOT EXISTS last_reply (id TEXT PRIMARY KEY, reply TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+    ).run();
+    await this.db.prepare(
+      "CREATE TABLE IF NOT EXISTS sender_profile (id TEXT PRIMARY KEY, profile TEXT NOT NULL, updated_at INTEGER NOT NULL)"
     ).run();
     return true;
   }
