@@ -2,6 +2,7 @@ import { handleMessage } from "./app.js";
 import { APP_VERSION } from "./config.js";
 import { HydroStore } from "./hydro-store.js";
 import { twiml } from "./sms.js";
+import { compactAscii } from "./text.js";
 
 export default {
   async fetch(request, env) {
@@ -14,7 +15,7 @@ export default {
     }
 
     const form = await request.formData();
-    const message = String(form.get("Body") || "").trim();
+    const message = compactAscii(String(form.get("Body") || ""));
     const from = String(form.get("From") || "").trim();
     const reply = await safeHandleMessage(message, env, from);
 

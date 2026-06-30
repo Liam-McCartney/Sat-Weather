@@ -1,51 +1,63 @@
 import { AskService, isContinue, parseAsk, parseAskPerplexity } from "./ask.js";
+import { SPOT_SMS_LIMIT } from "./config.js";
 import { fireReply } from "./fire.js";
 import { GeminiService, parseGemini } from "./gemini.js";
 import { HydroService, parseRiverCommand } from "./hydro.js";
 import { ScratchBook } from "./scratchbook.js";
+import { compactAscii, takeSmsChunk } from "./text.js";
 import { weatherReply } from "./weather.js";
 
 export async function handleMessage(message, env, from) {
   const scratchBook = new ScratchBook(env);
   await scratchBook.purgeOld();
 
+  const spotFallback = await spotTruncationReply(message, scratchBook, from);
+  if (spotFallback) {
+    return spotFallback;
+  }
+
+  const remember = async (reply) => {
+    await scratchBook.saveLastReply(from, reply);
+    return reply;
+  };
+
   const help = helpReply(message);
   if (help) {
-    return help;
+    return remember(help);
   }
 
   const askService = new AskService(env, scratchBook);
   if (isContinue(message)) {
-    return askService.continue(from);
+    return remember(await askService.continue(from));
   }
 
   const askp = parseAskPerplexity(message);
   if (askp) {
-    return askService.answer(askp, from);
+    return remember(await askService.answer(askp, from));
   }
 
   const ask = parseAsk(message);
   if (ask) {
-    return new GeminiService(env, scratchBook).answer(ask, from);
+    return remember(await new GeminiService(env, scratchBook).answer(ask, from));
   }
 
   const gemini = parseGemini(message);
   if (gemini) {
-    return new GeminiService(env, scratchBook).answer(gemini, from);
+    return remember(await new GeminiService(env, scratchBook).answer(gemini, from));
   }
 
   const river = parseRiverCommand(message);
   if (river) {
-    return new HydroService(env, scratchBook).answer(river);
+    return remember(await new HydroService(env, scratchBook).answer(river));
   }
 
   const fire = await fireReply(message);
   if (fire) {
-    return fire;
+    return remember(fire);
   }
 
   const weather = await weatherReply(message);
-  return weather || unknownCommandText();
+  return remember(weather || unknownCommandText());
 }
 
 function helpText() {
@@ -78,4 +90,24 @@ function helpReply(message) {
   }
 
   return "";
+}
+
+async function spotTruncationReply(message, scratchBook, from) {
+  if (!isSpotTruncationNotice(message)) {
+    return "";
+  }
+
+  const previous = await scratchBook.getLastReply(from);
+  if (!previous) {
+    return "SPOT truncated prior reply; no saved copy. Try a shorter command.";
+  }
+
+  const short = takeSmsChunk(previous, SPOT_SMS_LIMIT);
+  return short || "SPOT truncated prior reply; no readable saved copy.";
+}
+
+function isSpotTruncationNotice(message) {
+  const text = compactAscii(message).toLowerCase();
+  return text.includes("message sent was truncated")
+    && text.includes("message exceeds length limit");
 }

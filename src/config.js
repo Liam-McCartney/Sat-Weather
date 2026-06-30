@@ -1,8 +1,9 @@
-export const APP_VERSION = "2026-06-26-fx-bc-mb-qc";
+export const APP_VERSION = "2026-06-30-spot-retry";
 
 export const ASK_SMS_LIMIT = 306;
 export const CONT_SUFFIX = " Reply cont";
 export const SCRATCH_TTL_MS = 10 * 60 * 1000;
+export const SPOT_SMS_LIMIT = 140;
 
 export const ASK_SYSTEM_PROMPT = [
   "You answer for a satellite SMS bot used when the sender has poor or no data service.",
