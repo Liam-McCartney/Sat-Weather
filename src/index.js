@@ -6,6 +6,7 @@ import { twiml } from "./sms.js";
 import { compactAscii } from "./text.js";
 
 export default {
+  // Twilio posts form-encoded SMS payloads; GET is reserved for health/admin endpoints.
   async fetch(request, env) {
     if (request.method === "GET") {
       return handleGet(request, env);
@@ -39,6 +40,7 @@ async function handleGet(request, env) {
   return new Response(`Sat Weather ${APP_VERSION} is running.`);
 }
 
+// Admin endpoint for manually refreshing Hydro station metadata into D1.
 async function handleHydroSync(url, env) {
   if (!isAuthorized(url, env)) {
     return json({ error: "Unauthorized" }, 401);
@@ -66,6 +68,7 @@ async function handleHydroStatus(url, env) {
   });
 }
 
+// Simple shared-token auth is enough for private admin endpoints on this tiny bot.
 function isAuthorized(url, env) {
   const expected = String(env?.ADMIN_TOKEN || "").trim();
   const provided = String(url.searchParams.get("token") || "").trim();

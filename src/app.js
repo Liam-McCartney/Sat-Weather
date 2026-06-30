@@ -73,6 +73,7 @@ function unknownCommandText() {
   return "Unknown cmd. Try: bot help. Ex: wx tdy town prov; fx town prov; rv river prov; ask question; cont.";
 }
 
+// Centralizes the small command reference replies so Twilio help cannot hijack individual command help.
 function helpReply(message) {
   if (/^bot help$/i.test(message)) {
     return helpText();
@@ -123,6 +124,7 @@ async function deliveryNoticeReply(message, scratchBook, from) {
   return pageConstrainedReply(spotSafeSummary(previous, ""), scratchBook, from);
 }
 
+// Constrained senders use the shared scratch page even for non-ask commands.
 async function continueConstrainedReply(scratchBook, from) {
   const tail = await scratchBook.get(from);
   if (!tail) {
@@ -163,6 +165,7 @@ function spotSafeSummary(reply, command) {
   );
 }
 
+// Pulls the highest-value weather facts out of the verbose wx format before paging.
 function condenseWeather(text) {
   const daily = text.match(/^([^:]+):\s+(Tdy|Tmr)\s+([^.]*)\.\s+Rain\s+([^.]*)\.\s+([\s\S]*?)\s+Wind\s+([^.]*)\.?$/i);
   if (daily) {
@@ -184,6 +187,7 @@ function condenseWeather(text) {
   return "";
 }
 
+// Fire replies already contain official caveats; constrained mode keeps the status and drops repeated warnings.
 function condenseFire(text) {
   if (!/^\w{2}\s+/.test(text) || !/(fire|burn|restriction|ban|sopfeu|bcws|burnsafe|rfz)/i.test(text)) {
     return "";
@@ -199,6 +203,7 @@ function condenseFire(text) {
     .replace(/allowed/gi, "ok");
 }
 
+// Help copy has handcrafted short versions because generic truncation makes examples unreadable.
 function condenseHelp(text) {
   if (/^Cmds:/i.test(text)) {
     return "Cmds wx fx rv ask askp cont. Info bot wx/fx/rv/ask.";
@@ -231,6 +236,7 @@ function condenseUnknown(text) {
   return "Unknown. Try bot help. Ex wx tdy town prov; fx town prov; rv river prov; ask q; cont.";
 }
 
+// Freeform answers are condensed by sentence so the first page stays coherent.
 function condenseAsk(text, command) {
   if (!/^(ask|askp|gemini)\s+/i.test(command)) {
     return "";
@@ -240,6 +246,7 @@ function condenseAsk(text, command) {
   return sentences.slice(0, 2).join(" ") || text;
 }
 
+// Last-mile abbreviation shared by all constrained summaries.
 function condenseGeneric(text) {
   return compactAscii(text)
     .replace(/\btemperature\b/gi, "temp")

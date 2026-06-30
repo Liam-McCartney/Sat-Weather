@@ -4,6 +4,7 @@ export function limitSms(text) {
   return compact.length <= 450 ? compact : `${compact.slice(0, 447).trim()}...`;
 }
 
+// Hard cap for deterministic command output that has no continuation path.
 export function compactText(text, maxLength) {
   const compact = String(text).replace(/\s+/g, " ").trim();
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trim()}...`;
@@ -23,10 +24,12 @@ export function cleanAskText(text) {
     .trim();
 }
 
+// Most command paths run through this before matching or sending text.
 export function compactAscii(text) {
   return cleanAskText(text).replace(/\s+/g, " ").trim();
 }
 
+// Prefer splitting on a word boundary, but always obey the requested max length.
 export function takeSmsChunk(text, maxLength) {
   const clean = compactAscii(text);
   if (clean.length <= maxLength) {

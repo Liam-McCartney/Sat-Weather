@@ -7,6 +7,7 @@ export class HydroStore {
     this.db = env?.SCRATCH;
   }
 
+  // Station metadata, manual aliases, and sync timestamps all live in the existing SCRATCH D1 binding.
   async ensureReady() {
     if (!this.db) {
       return false;
@@ -67,6 +68,7 @@ export class HydroStore {
     };
   }
 
+  // Manual aliases encode paddler beta where official gauge names are not human-friendly.
   async findAlias(alias, province) {
     if (!await this.ensureReady()) {
       return null;
@@ -79,6 +81,7 @@ export class HydroStore {
     return row ? stationFromRow(row, 1000) : null;
   }
 
+  // Exact station ids are authoritative and should not run through fuzzy matching.
   async findStationByNumber(stationNumber) {
     if (!await this.ensureReady()) {
       return null;
@@ -90,6 +93,7 @@ export class HydroStore {
     return row ? stationFromRow(row, 1000) : null;
   }
 
+  // Candidate fetch is province-scoped to keep fuzzy scoring cheap inside a Worker request.
   async stationsForProvinces(provinces) {
     if (!await this.ensureReady()) {
       return [];
@@ -136,6 +140,7 @@ export class HydroStore {
   }
 }
 
+// Follows API pagination until all realtime Canadian stations are cached.
 async function fetchHydroStations() {
   const stations = [];
   let nextUrl = HYDRO_SYNC_URL;
@@ -160,6 +165,7 @@ async function fetchHydroStations() {
   return stations;
 }
 
+// Converts GeoJSON station features into the compact D1 row shape used by rv matching.
 function mapStation(feature) {
   const properties = feature?.properties || {};
   const coords = feature?.geometry?.coordinates || [];

@@ -72,6 +72,7 @@ const STOP_WORDS = new Set([
   "the",
 ]);
 
+// rv parser stays shallow; station resolution needs the raw paddler phrase intact.
 export function parseRiverCommand(message) {
   const match = message.match(/^rv\s+(.+)$/i);
   if (!match) {
@@ -88,6 +89,7 @@ export class HydroService {
     this.store = new HydroStore(env);
   }
 
+  // Main rv flow: refresh metadata, resolve a station, then format the latest realtime reading.
   async answer(query) {
     await this.store.syncStationsIfStale();
 
@@ -106,6 +108,7 @@ export class HydroService {
     return this.answerStation(station);
   }
 
+  // Separates station matching from reading retrieval so ambiguity can be reported cleanly.
   async answerStation(station) {
     if (!station) {
       if (this.lastCandidates?.length) {
@@ -215,10 +218,12 @@ export class HydroService {
   }
 }
 
+// Direct gauge lookup bypasses fuzzy search when the user knows the official station id.
 function parseStationId(query) {
   return query.match(/\b\d{2}[a-z]{2}\d{3}\b/i)?.[0].toUpperCase() || "";
 }
 
+// River queries require a province so fuzzy matching does not scan all of Canada.
 function parseHydroQuery(query) {
   const province = parseProvince(query);
   if (!province) {
@@ -254,6 +259,7 @@ function parseProvince(query) {
   };
 }
 
+// Deterministic scorer rewards province, exact phrase matches, token matches, and tiny typos.
 function scoreStation(station, parsed, queryTokens) {
   const stationTokens = usefulTokens(station.searchText);
   let score = station.province === parsed.province ? 20 : 8;
@@ -284,6 +290,7 @@ function usefulTokens(text) {
     .filter((token) => token.length > 1 && !STOP_WORDS.has(token));
 }
 
+// Weather Canada realtime endpoint returns newest reading when sorted descending by DATETIME.
 async function latestReading(stationNumber) {
   const params = new URLSearchParams({
     f: "json",
@@ -311,6 +318,7 @@ async function latestReading(stationNumber) {
   };
 }
 
+// SMS output prioritizes discharge in m3/s, with level as secondary context.
 function formatReading(station, reading) {
   const flow = reading.discharge === null ? "flow n/a" : `${roundReading(reading.discharge)} m3/s`;
   const level = reading.level === null ? "" : `, level ${roundLevel(reading.level)} m`;
@@ -371,6 +379,7 @@ function parseJson(text) {
   }
 }
 
+// Tiny typo tolerance helps with river names typed on awkward devices.
 function editDistanceAtMostOne(left, right) {
   if (Math.abs(left.length - right.length) > 1) {
     return false;

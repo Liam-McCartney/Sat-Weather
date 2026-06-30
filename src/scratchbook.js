@@ -7,6 +7,7 @@ export class ScratchBook {
     this.secret = String(env?.SCRATCH_SECRET || "sat-weather-scratch").trim();
   }
 
+  // Opportunistic cleanup runs on normal requests; no scheduled worker needed.
   async purgeOld() {
     if (!await this.ensureReady()) {
       return;
@@ -21,6 +22,7 @@ export class ScratchBook {
       .run();
   }
 
+  // Scratch tail stores the next page for cont.
   async save(from, tail) {
     const id = await this.senderId(from);
     if (!id || !await this.ensureReady()) {
@@ -56,6 +58,7 @@ export class ScratchBook {
       .run();
   }
 
+  // Last full reply lets delivery-failure notices trigger a safer retry.
   async saveLastReply(from, reply) {
     const id = await this.senderId(from);
     const text = String(reply || "").trim();
@@ -94,6 +97,7 @@ export class ScratchBook {
     return true;
   }
 
+  // Sender profile is persistent, unlike scratch pages, so one failure teaches future replies.
   async isConstrainedSender(from) {
     const id = await this.senderId(from);
     if (!id || !await this.ensureReady()) {
@@ -124,6 +128,7 @@ export class ScratchBook {
     return true;
   }
 
+  // Hash phone numbers before storing them so D1 does not contain raw sender ids.
   async senderId(from) {
     const sender = String(from || "").trim();
     if (!sender) {

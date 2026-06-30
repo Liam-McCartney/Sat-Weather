@@ -6,6 +6,7 @@ export function twiml(message) {
   );
 }
 
+// Provider output can contain XML metacharacters, so escape before returning TwiML.
 function escapeXml(value) {
   return value.replace(/[<>&'"]/g, (char) => {
     return {

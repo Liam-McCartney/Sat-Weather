@@ -24,6 +24,7 @@ export function parseLocationText(text) {
   };
 }
 
+// Turns a parsed place or UTM input into the lat/lon shape command modules expect.
 export async function resolveLocation(parsed) {
   if (!parsed) {
     return null;
@@ -46,6 +47,7 @@ export async function geocode(town, province, provinceCode = "") {
   return geocodeNominatim(town, province, provinceCode);
 }
 
+// Reverse lookup fills in county/municipality data for adapters that need local jurisdiction.
 export async function reverseAdmin(lat, lon) {
   const params = new URLSearchParams({
     lat: String(lat),
@@ -115,6 +117,7 @@ function parseUtmLocation(location) {
   };
 }
 
+// Longest-match province parsing lets "newfoundland and labrador" win over shorter aliases.
 function parseProvince(location) {
   const normalized = normalize(location);
   const matches = Object.entries(PROVINCES)
@@ -135,6 +138,7 @@ function provinceByName(value) {
   return Object.values(PROVINCES).find((province) => normalize(province.name) === normalized) || null;
 }
 
+// Open-Meteo geocoder is quick but misses some niche places.
 async function geocodeOpenMeteo(town, province, provinceCode) {
   const params = new URLSearchParams({
     name: town,
@@ -167,6 +171,7 @@ async function geocodeOpenMeteo(town, province, provinceCode) {
   };
 }
 
+// Nominatim broadens coverage for small towns, parks, and remote areas.
 async function geocodeNominatim(town, province, provinceCode) {
   const params = new URLSearchParams({
     q: `${town}, ${province}, Canada`,
@@ -206,6 +211,7 @@ async function geocodeNominatim(town, province, provinceCode) {
   };
 }
 
+// Shared loose matching for province names and geocoder admin fields.
 function normalize(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }

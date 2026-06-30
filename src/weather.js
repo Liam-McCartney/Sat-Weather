@@ -1,6 +1,7 @@
 // Weather command backed by Open-Meteo forecast data, formatted for compact SMS replies.
 import { parseLocationText, resolveLocation } from "./location.js";
 
+// wx command flow: parse mode/location, resolve coordinates, call Open-Meteo, format SMS.
 export async function weatherReply(message) {
   const command = parseCommand(message);
   if (!command) {
@@ -16,6 +17,7 @@ export async function weatherReply(message) {
   return formatForecast(command.mode, place, forecast);
 }
 
+// Keeps wx grammar strict so typos fall through to the general unknown-command help.
 function parseCommand(message) {
   const match = message.match(/^wx\s+(tdy|tmr|wk)\s+(.+)$/i);
   if (!match) {
@@ -36,6 +38,7 @@ function parseCommand(message) {
   };
 }
 
+// Requests both daily and hourly fields because tdy/tmr need period breakdowns.
 async function getForecast(lat, lon) {
   const params = new URLSearchParams({
     latitude: String(lat),
@@ -69,6 +72,7 @@ async function getForecast(lat, lon) {
   return response.json();
 }
 
+// Dispatches between daily period detail and week summary.
 function formatForecast(mode, place, data) {
   if (mode === "wk") {
     return formatWeek(place, data);
@@ -77,6 +81,7 @@ function formatForecast(mode, place, data) {
   return formatDay(mode, place, data, mode === "tmr" ? 1 : 0);
 }
 
+// Today/tomorrow output emphasizes temp, rain probability/amount, periods, and wind.
 function formatDay(mode, place, data, dayIndex) {
   const day = dailyAt(data, dayIndex);
   const label = mode === "tmr" ? "Tmr" : "Tdy";
@@ -87,6 +92,7 @@ function formatDay(mode, place, data, dayIndex) {
   return `${place.name}: ${label} ${Math.round(day.min)}..${Math.round(day.max)}C ${weatherCode(day.code)}. Rain ${day.pop}%/${round1(day.precip)}mm. ${parts}. Wind ${compass(day.windDir)} ${Math.round(day.wind)}km/h.`;
 }
 
+// Weekly output is a scan-friendly list of daily temp ranges and dominant weather.
 function formatWeek(place, data) {
   const days = Array.from({ length: 7 }, (_, index) => dailyAt(data, index));
   const summary = days
@@ -131,6 +137,7 @@ function dayparts(data, date) {
     .filter(Boolean);
 }
 
+// Condenses a block of hourly forecasts into one period summary.
 function summarizeHours(data, date, range) {
   const hourly = data.hourly;
   const hours = hourly.time
@@ -193,6 +200,7 @@ function weekday(value) {
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getUTCDay()];
 }
 
+// Converts Open-Meteo numeric weather codes into SMS-readable words.
 function weatherCode(code) {
   const codes = {
     0: "clear",

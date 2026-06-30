@@ -8,6 +8,7 @@ const MB_RESTRICTIONS_JS_URL = "https://www.gov.mb.ca/conservation_fire/Restrict
 const MB_MUNICIPAL_QUERY_URL = "https://services.arcgis.com/mMUesHYPkXjaFGfS/arcgis/rest/services/Manitoba_Current_Municipal_Burning_Restrictions_Layer/FeatureServer/0/query";
 const BC_FIRE_CENTRE_BASE_URL = "https://www2.gov.bc.ca/gov/content/safety/wildfire-status/prevention/fire-bans-and-restrictions";
 
+// fx command flow: resolve location, pick the provincial adapter, normalize its result.
 export async function fireReply(message) {
   const query = parseFireCommand(message);
   if (!query) {
@@ -31,6 +32,7 @@ export async function fireReply(message) {
   return formatFireReply(result);
 }
 
+// Fire lookups share the same town/province and UTM parser as weather.
 export function parseFireCommand(message) {
   const match = message.match(/^fx\s+(.+)$/i);
   if (!match) {
@@ -49,6 +51,7 @@ export function parseFireCommand(message) {
   };
 }
 
+// Ontario exposes a single provincial RFZ status page, not point-specific API data.
 async function ontarioAdapter({ location }) {
   const html = await fetchText(ON_FOREST_FIRES_URL);
   const updated = textMatch(html, /<small>\s*Updated:\s*([\s\S]*?)<\/small>/i);
@@ -65,6 +68,7 @@ async function ontarioAdapter({ location }) {
   };
 }
 
+// Nova Scotia BurnSafe is county-based, so county inference matters more than exact town.
 async function novaScotiaAdapter({ location, admin, query }) {
   const html = await fetchText(NS_BURNSAFE_URL);
   const updated = textMatch(html, /Last updated:\s*([^<]+)/i);
@@ -139,6 +143,7 @@ async function manitobaAdapter({ location }) {
   };
 }
 
+// Quebec is intentionally conservative until SOPFEU point-level API details are known.
 async function quebecAdapter({ location }) {
   return {
     provinceCode: "QC",
@@ -178,6 +183,7 @@ async function adminForLocation(location) {
   }
 }
 
+// Stubs keep unsupported provinces explicit instead of silently pretending coverage exists.
 function sourceOnlyAdapter(code, authority, sourceType, note) {
   return async ({ location }) => ({
     provinceCode: code,
@@ -202,6 +208,7 @@ async function unsupportedAdapter({ location, admin }) {
   };
 }
 
+// Fire sources are mostly public pages, so adapters share a small HTML fetch wrapper.
 async function fetchText(url) {
   const response = await fetch(url, {
     headers: {
@@ -232,6 +239,7 @@ async function fetchJson(url) {
   return response.json();
 }
 
+// BC pages show status beside category labels; this extracts the nearby allowed/prohibited text.
 function bcCategoryStatus(html, label) {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const afterLabel = html.match(new RegExp(`${escaped}[\\s\\S]{0,1800}`, "i"))?.[0] || "";
@@ -241,6 +249,7 @@ function bcCategoryStatus(html, label) {
   return status.toLowerCase();
 }
 
+// BC fire centre selection is approximate but useful enough for SMS triage.
 function inferBcFireCentre(location, parsedLocation) {
   const text = normalizeForLookup([
     parsedLocation?.town,
@@ -299,6 +308,7 @@ async function manitobaProvincialSummary() {
   return { status: `provincial restrictions in areas ${active.map((area) => area.area).join(", ")}`, updated };
 }
 
+// Manitoba municipal restrictions are polygon features queried by point.
 async function manitobaMunicipalStatus(location) {
   const url = new URL(MB_MUNICIPAL_QUERY_URL);
   url.searchParams.set("f", "json");
@@ -396,6 +406,7 @@ function titleCase(value) {
   return String(value || "").toLowerCase().replace(/\b[a-z]/g, (char) => char.toUpperCase());
 }
 
+// All adapters collapse into one compact province/authority/status sentence.
 function formatFireReply(result) {
   const updated = result.updated ? ` Updated ${result.updated}.` : "";
   const note = result.note ? ` ${result.note}` : "";

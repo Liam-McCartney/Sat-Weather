@@ -14,6 +14,7 @@ export class AskService {
     this.scratchBook = scratchBook;
   }
 
+  // Entry point for askp: call Perplexity, clean provider noise, then page if needed.
   async answer(question, from) {
     if (!this.env?.PERPLEXITY_API_KEY) {
       return "Ask not configured. Add PERPLEXITY_API_KEY as a Cloudflare Worker secret.";
@@ -24,6 +25,7 @@ export class AskService {
     return this.chunkReply(from, cleanAskText(text || "No answer returned."));
   }
 
+  // askp continuation uses the same scratch table as other paged replies.
   async continue(from) {
     const tail = await this.scratchBook.get(from);
     if (!tail) {
@@ -95,6 +97,7 @@ export class AskService {
     return response.json();
   }
 
+  // Prefer the Cloudflare AI binding when available; keep the static Gateway URL for local/direct deploys.
   async perplexityGatewayUrl() {
     if (this.env?.AI) {
       const baseUrl = await this.env.AI.gateway("sat-weather").getUrl("perplexity-ai");
@@ -104,6 +107,7 @@ export class AskService {
     return PERPLEXITY_GATEWAY_URL;
   }
 
+  // Keep prompts terse because every extra token competes with SMS-size output.
   perplexityPayload(question) {
     return JSON.stringify({
       model: "sonar-pro",
@@ -128,6 +132,7 @@ export class AskService {
     };
   }
 
+  // Search fallback gives a usable synopsis when the chat endpoint rejects or times out.
   async callPerplexitySearch(question, apiKey) {
     const payload = JSON.stringify({
       query: question,
@@ -171,6 +176,7 @@ export class AskService {
   }
 }
 
+// Accept the historic wx ask form as well as plain ask.
 export function parseAsk(message) {
   const match = message.match(/^(?:wx\s+)?ask\s+(.+)$/i);
   if (!match) {
@@ -193,6 +199,7 @@ export function isContinue(message) {
   return /^(?:wx\s+)?(?:cont|continue)$/i.test(message);
 }
 
+// Search results become a short numbered digest rather than raw links/citations.
 function formatSearchResults(results) {
   return results
     .slice(0, 2)
@@ -204,6 +211,7 @@ function formatSearchResults(results) {
     .join(" ");
 }
 
+// Provider errors are compressed because they may be returned over SMS.
 async function shortProviderError(response) {
   const body = await response.text();
   try {

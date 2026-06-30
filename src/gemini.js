@@ -8,6 +8,7 @@ export class GeminiService {
     this.scratchBook = scratchBook;
   }
 
+  // Entry point for ask/gemini: grounded Gemini answer, ASCII cleanup, then D1-backed paging.
   async answer(question, from) {
     const cleanKey = String(this.env?.GEMINI_API_KEY || "").trim();
     if (!cleanKey) {
@@ -22,6 +23,7 @@ export class GeminiService {
     return this.chunkReply(from, cleanAskText(text || "No answer returned."));
   }
 
+  // Gemini can be verbose; save overflow so cont can retrieve it.
   async chunkReply(from, text) {
     const clean = compactAscii(text);
     const first = takeSmsChunk(clean, ASK_SMS_LIMIT - CONT_SUFFIX.length);
@@ -62,6 +64,7 @@ export class GeminiService {
     );
   }
 
+  // Compatibility endpoint is a last resort when native Gemini calls fail.
   async callGeminiCompat(apiKey, question, options = {}) {
     const response = await fetch(GEMINI_OPENAI_URL, {
       method: "POST",
@@ -100,6 +103,7 @@ export class GeminiService {
     };
   }
 
+  // Native call wrapper keeps gateway and direct Google calls on the same response shape.
   async callGeminiNative(url, apiKey, payload) {
     const response = await fetch(url, {
       method: "POST",
@@ -162,6 +166,7 @@ export class GeminiService {
     return JSON.stringify(payload);
   }
 
+  // Handles both OpenAI-compatible and native Gemini response formats.
   extractText(data) {
     const compatText = data.choices?.[0]?.message?.content;
     if (compatText) {
@@ -175,6 +180,7 @@ export class GeminiService {
   }
 }
 
+// gemini is kept as a diagnostic/manual command alongside ask.
 export function parseGemini(message) {
   const match = message.match(/^(?:wx\s+)?gemini\s+(.+)$/i);
   if (!match) {
