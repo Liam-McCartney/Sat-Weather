@@ -1,3 +1,4 @@
+// Shared location parsing for wx/fx: either town+province or Canadian UTM coordinates.
 export function parseLocationText(text) {
   const location = String(text || "").trim().replace(/\s+/g, " ");
   const utm = parseUtmLocation(location);
@@ -35,6 +36,7 @@ export async function resolveLocation(parsed) {
   return geocode(parsed.town, parsed.province, parsed.provinceCode);
 }
 
+// Open-Meteo is fast for common towns; Nominatim is the broader fallback for niche places.
 export async function geocode(town, province, provinceCode = "") {
   const openMeteoMatch = await geocodeOpenMeteo(town, province, provinceCode);
   if (openMeteoMatch) {
@@ -74,6 +76,7 @@ export async function reverseAdmin(lat, lon) {
   };
 }
 
+// Accept explicit "utm" or bare zone/easting/northing for field use over SMS.
 function parseUtmLocation(location) {
   const match = location.match(/^(?:utm\s+)?(\d{1,2}[c-xC-X]?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/i);
   if (!match) {
@@ -211,6 +214,7 @@ function shortPlaceName(displayName, fallback) {
   return String(displayName || fallback).split(",")[0].trim() || fallback;
 }
 
+// Local UTM conversion avoids another network call when the user has grid coordinates.
 function utmToLatLon(zone, easting, northing, northernHemisphere) {
   const a = 6378137;
   const f = 1 / 298.257223563;

@@ -1,3 +1,4 @@
+// River level command: resolve a paddler-style river query to a Hydro Canada gauge, then fetch latest flow.
 import { GeminiService } from "./gemini.js";
 import { HydroStore, normalizeHydroText } from "./hydro-store.js";
 import { compactText } from "./text.js";
@@ -122,6 +123,7 @@ export class HydroService {
     return formatReading(station, reading);
   }
 
+  // Resolution order: manual alias, exact station id, deterministic fuzzy score, Gemini fallback, cautious local fallback.
   async resolveStation(parsed) {
     const alias = await this.store.findAlias(parsed.queryText, parsed.province);
     if (alias) {
@@ -156,6 +158,7 @@ export class HydroService {
     return null;
   }
 
+  // Include border provinces because rivers and paddling sections often cross provincial lines.
   async localCandidates(parsed) {
     const provinces = BORDER_PROVINCES[parsed.province] || [parsed.province];
     const stations = await this.store.stationsForProvinces(provinces);
@@ -171,6 +174,7 @@ export class HydroService {
       .slice(0, 12);
   }
 
+  // Gemini is only an arbiter among already-plausible Hydro candidates, not the source of gauge data.
   async rankWithGemini(parsed, candidates) {
     if (!this.env?.GEMINI_API_KEY || candidates.length < 2) {
       return null;

@@ -1,3 +1,4 @@
+// Cloudflare Worker entrypoint: Twilio webhooks in, TwiML responses out.
 import { handleMessage } from "./app.js";
 import { APP_VERSION } from "./config.js";
 import { HydroStore } from "./hydro-store.js";
@@ -23,6 +24,7 @@ export default {
   },
 };
 
+// GET endpoints are intentionally admin/health only; SMS commands use POST webhooks.
 async function handleGet(request, env) {
   const url = new URL(request.url);
 
@@ -70,6 +72,7 @@ function isAuthorized(url, env) {
   return Boolean(expected) && provided === expected;
 }
 
+// Never expose stack traces over SMS; keep field failures short and actionable.
 async function safeHandleMessage(message, env, from) {
   try {
     return await handleMessage(message, env, from);

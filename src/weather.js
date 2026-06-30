@@ -1,3 +1,4 @@
+// Weather command backed by Open-Meteo forecast data, formatted for compact SMS replies.
 import { parseLocationText, resolveLocation } from "./location.js";
 
 export async function weatherReply(message) {
@@ -114,6 +115,7 @@ function compass(degrees) {
   return dirs[Math.round(degrees / 45) % 8];
 }
 
+// Dayparts match the way the bot describes short-term weather over satellite SMS.
 function dayparts(data, date) {
   const ranges = [
     { label: "O/n", start: 0, end: 6 },
@@ -154,6 +156,7 @@ function summarizeHours(data, date, range) {
   };
 }
 
+// Weight severe weather higher so storms/rain do not disappear in an average-looking period.
 function dominantCode(codes) {
   const counts = new Map();
   for (const code of codes) {

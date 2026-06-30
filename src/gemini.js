@@ -1,3 +1,4 @@
+// Gemini-backed ask path used for grounded web answers and river gauge disambiguation.
 import { ASK_SMS_LIMIT, ASK_SYSTEM_PROMPT, CONT_SUFFIX, GEMINI_GATEWAY_URL } from "./config.js";
 import { cleanAskText, compactAscii, limitSms, takeSmsChunk } from "./text.js";
 
@@ -38,6 +39,7 @@ export class GeminiService {
     return takeSmsChunk(clean, ASK_SMS_LIMIT);
   }
 
+  // Try Cloudflare AI Gateway first, then direct native Gemini, then OpenAI-compatible Gemini.
   async callGemini(question, apiKey, options = {}) {
     const nativePayload = this.nativePayload(question, options);
     const gateway = await this.callGeminiNative(GEMINI_GATEWAY_URL, apiKey, nativePayload);
@@ -122,6 +124,7 @@ export class GeminiService {
     };
   }
 
+  // Native Gemini payload is required for Google Search grounding.
   nativePayload(question, options = {}) {
     const payload = {
       systemInstruction: {

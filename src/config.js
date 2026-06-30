@@ -1,3 +1,4 @@
+// Shared runtime constants for deployed versioning, SMS limits, and provider gateway endpoints.
 export const APP_VERSION = "2026-06-30-spot-profiles";
 
 export const ASK_SMS_LIMIT = 306;

@@ -9,6 +9,7 @@ import { weatherReply } from "./weather.js";
 
 const SPOT_CONT_SUFFIX = " cont";
 
+// SPOT-like gateways are detected after their first delivery failure and kept in a compact reply mode.
 export async function handleMessage(message, env, from) {
   const scratchBook = new ScratchBook(env);
   await scratchBook.purgeOld();
@@ -96,6 +97,7 @@ function helpReply(message) {
   return "";
 }
 
+// Store the full response for recovery, but transform replies for constrained satellite/SMS senders.
 async function prepareReply(reply, command, scratchBook, from, constrained) {
   await scratchBook.saveLastReply(from, reply);
 
@@ -106,6 +108,7 @@ async function prepareReply(reply, command, scratchBook, from, constrained) {
   return pageConstrainedReply(spotSafeSummary(reply, command), scratchBook, from);
 }
 
+// Delivery failure notices are inbound SMSes from the device service, not user commands.
 async function deliveryNoticeReply(message, scratchBook, from) {
   if (!isDeliveryFailureNotice(message)) {
     return "";
@@ -129,6 +132,7 @@ async function continueConstrainedReply(scratchBook, from) {
   return pageConstrainedReply(tail, scratchBook, from, false);
 }
 
+// Page compact replies through D1 so constrained devices can ask for the rest with cont.
 async function pageConstrainedReply(text, scratchBook, from, condense = true) {
   const clean = condense ? spotSafeSummary(text, "") : compactAscii(text);
   const first = takeSmsChunk(clean, SPOT_SMS_LIMIT - SPOT_CONT_SUFFIX.length);
@@ -146,6 +150,7 @@ async function pageConstrainedReply(text, scratchBook, from, condense = true) {
   return takeSmsChunk(clean, SPOT_SMS_LIMIT);
 }
 
+// Prefer command-aware summaries over blind character slicing; the final pager enforces the hard cap.
 function spotSafeSummary(reply, command) {
   const clean = compactAscii(reply);
   return condenseGeneric(
@@ -251,6 +256,7 @@ function condenseGeneric(text) {
     .trim();
 }
 
+// Match generic gateway failure language so Garmin/ZOLEO-like services can be learned too.
 function isDeliveryFailureNotice(message) {
   const text = compactAscii(message).toLowerCase();
   const hasLengthProblem = text.includes("message sent was truncated")

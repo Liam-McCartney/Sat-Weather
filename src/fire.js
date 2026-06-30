@@ -1,3 +1,4 @@
+// Fire restriction command adapters. Each province source is different, so adapters normalize to one SMS result shape.
 import { parseLocationText, resolveLocation, reverseAdmin } from "./location.js";
 import { compactText } from "./text.js";
 
@@ -93,6 +94,7 @@ async function novaScotiaAdapter({ location, admin, query }) {
   };
 }
 
+// BC publishes status per fire centre; location matching is a town alias plus rough coordinate classifier.
 async function britishColumbiaAdapter({ location, query }) {
   const centre = inferBcFireCentre(location, query.location);
   const html = await fetchText(`${BC_FIRE_CENTRE_BASE_URL}/${centre.slug}`);
@@ -114,6 +116,7 @@ async function britishColumbiaAdapter({ location, query }) {
   };
 }
 
+// Manitoba needs both provincial area restrictions and municipal ArcGIS point lookup.
 async function manitobaAdapter({ location }) {
   const [provincial, municipal] = await Promise.all([
     manitobaProvincialSummary(),
@@ -148,6 +151,7 @@ async function quebecAdapter({ location }) {
   };
 }
 
+// Reverse geocoding is only used when province/county details are needed beyond the original query.
 async function adminForLocation(location) {
   const fallback = {
     province: location.province,
@@ -273,6 +277,7 @@ function inferBcFireCentre(location, parsedLocation) {
   return { ...BC_FIRE_CENTRES.kamloops, confidence: "coordinate-rough" };
 }
 
+// Manitoba exposes JSON as concatenated JavaScript string literals rather than a clean API response.
 async function manitobaProvincialSummary() {
   const js = await fetchText(MB_RESTRICTIONS_JS_URL);
   const assignment = js.match(/var data = ([\s\S]*?);/i)?.[1] || "";

@@ -1,3 +1,4 @@
+// D1 cache for Hydro Canada station metadata and manual paddling-section aliases.
 const HYDRO_SYNC_URL = "https://api.weather.gc.ca/collections/hydrometric-stations/items?f=json&REAL_TIME=1&limit=500";
 const CANADA_CODES = new Set(["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"]);
 
@@ -43,6 +44,7 @@ export class HydroStore {
     };
   }
 
+  // Refresh once per UTC day so station metadata stays current without slowing every rv request.
   async syncStationsIfStale() {
     if (!await this.ensureReady()) {
       throw new Error("SCRATCH D1 binding not available.");
@@ -104,6 +106,7 @@ export class HydroStore {
     return (result.results || []).map((row) => stationFromRow(row, 0));
   }
 
+  // D1 batch size is kept modest so Cloudflare Worker requests stay predictable.
   async replaceStations(stations) {
     await this.db.prepare("DELETE FROM hydro_stations").run();
 
@@ -188,6 +191,7 @@ function nextPage(links) {
   return next ? next.href : "";
 }
 
+// Search text removes hydrology filler words so fuzzy matching focuses on names.
 function normalizeSearchText(value) {
   return String(value)
     .toLowerCase()

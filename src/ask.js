@@ -1,3 +1,4 @@
+// Perplexity-backed freeform ask command, with SMS-sized paging through ScratchBook.
 import {
   APP_VERSION,
   ASK_SMS_LIMIT,
@@ -40,6 +41,7 @@ export class AskService {
     return first;
   }
 
+  // Store overflow so the user can request the next page with cont.
   async chunkReply(from, text) {
     const clean = compactAscii(text);
     const first = takeSmsChunk(clean, ASK_SMS_LIMIT - CONT_SUFFIX.length);
@@ -57,6 +59,7 @@ export class AskService {
     return takeSmsChunk(clean, ASK_SMS_LIMIT);
   }
 
+  // Prefer the chat endpoint, then fall back to Perplexity search if chat fails.
   async callPerplexity(question) {
     const cleanKey = String(this.env?.PERPLEXITY_API_KEY || "").trim();
     const payload = this.perplexityPayload(question);

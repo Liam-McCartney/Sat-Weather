@@ -1,3 +1,4 @@
+// Text utilities keep provider output ASCII-ish and split replies on sane word boundaries.
 export function limitSms(text) {
   const compact = text.replace(/\s+/g, " ").trim();
   return compact.length <= 450 ? compact : `${compact.slice(0, 447).trim()}...`;
@@ -8,6 +9,7 @@ export function compactText(text, maxLength) {
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trim()}...`;
 }
 
+// Remove citations, smart punctuation, accents, and hidden chars that confuse SMS/satellite devices.
 export function cleanAskText(text) {
   return String(text)
     .normalize("NFKD")

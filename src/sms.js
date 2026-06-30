@@ -1,3 +1,4 @@
+// Twilio expects XML TwiML; escape user/provider text before embedding it in <Message>.
 export function twiml(message) {
   return new Response(
     `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(message)}</Message></Response>`,

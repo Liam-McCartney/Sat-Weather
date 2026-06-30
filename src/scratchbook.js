@@ -1,6 +1,7 @@
 import { SCRATCH_TTL_MS } from "./config.js";
 
 export class ScratchBook {
+  // D1-backed state: scratch pages are temporary, last replies recover failures, profiles persist sender constraints.
   constructor(env) {
     this.db = env?.SCRATCH;
     this.secret = String(env?.SCRATCH_SECRET || "sat-weather-scratch").trim();
@@ -80,6 +81,7 @@ export class ScratchBook {
     return String(row?.reply || "").trim();
   }
 
+  // Persist once a sender proves it needs short satellite-safe replies.
   async markConstrainedSender(from, profile = "spot") {
     const id = await this.senderId(from);
     if (!id || !await this.ensureReady()) {
@@ -104,6 +106,7 @@ export class ScratchBook {
     return ["spot", "sat", "constrained"].includes(String(row?.profile || "").toLowerCase());
   }
 
+  // Lazily create tables so local/manual D1 setup stays minimal.
   async ensureReady() {
     if (!this.db) {
       return false;
